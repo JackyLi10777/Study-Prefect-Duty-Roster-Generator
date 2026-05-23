@@ -5,7 +5,7 @@ import plotly.express as px
 from io import BytesIO
 
 # ==========================================
-# 1. 網頁初始設定（UI / UX 現代金色行動端優化風）
+# 1. 網頁初始設定（需為第一個執行的 Streamlit 指令）
 # ==========================================
 st.set_page_config(
     page_title="SYSS Study Prefect Duty Platform",
@@ -45,7 +45,7 @@ ROWS_ROSTER = [
 WEIGHTS = {row: 1.0 if 'Room302' in row or 'Assist' in row else 1.5 for row in ROWS_ROSTER}
 
 # ==========================================
-# 3. Session State 安全管理與初始化
+# 3. Session State 安全管理與強固初始化
 # ==========================================
 if 'students_df' not in st.session_state:
     st.session_state.students_df = pd.DataFrame(columns=[
@@ -54,7 +54,8 @@ if 'students_df' not in st.session_state:
     ])
 
 def create_blank_roster():
-    return pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
+    # 強制轉換為字串型別，避免後續寫入引發 Pandas FutureWarning
+    return pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("").astype(str)
 
 if 'roster_df' not in st.session_state:
     st.session_state.roster_df = create_blank_roster()
@@ -63,13 +64,14 @@ if 'show_clear_confirm' not in st.session_state:
     st.session_state.show_clear_confirm = False
 
 # ==========================================
-# 4. 高階排班演算法 (積分制 + 老帶新 + 疲勞控管)
+# 4. 高階排班演算法 (積分制 + 老帶新 + 全天請假排除)
 # ==========================================
-def generate_roster(students_df, leave_students):
+def generate_roster(students_df, leave_students, seed):
     if students_df.empty:
         st.error("⚠️ 錯誤：目前學生名冊為空，請先在左側邊欄新增或導入歷史檔案！")
         return create_blank_roster()
 
+    random.seed(seed)
     new_roster = create_blank_roster()
     students = students_df.to_dict('records')
     
@@ -92,10 +94,9 @@ def generate_roster(students_df, leave_students):
     for d_idx, day in enumerate(DAYS):
         assigned_today = set()
         
-        # 決定當天崗位順序，稍微打亂增加隨機性
+        # 決定當天崗位順序，打亂增加隨機性，但確保 -1 在 -2 前面以利判斷
         today_roles = list(ROWS_ROSTER)
         random.shuffle(today_roles)
-        # 確保 -1 在 -2 前面排，以利老帶新判斷
         today_roles.sort(key=lambda x: 1 if "- 2" in x else 0)
 
         for role in today_roles:
@@ -121,29 +122,27 @@ def generate_roster(students_df, leave_students):
 
             for s in students:
                 name = str(s.get('name', '')).strip()
+                # 核心業務邏輯：過濾掉空名字與「全天請假名單」中的學生
                 if not name or name in leave_students: continue
                 
-                # 可用性與當日重複排班檢查
                 if day not in student_avail_cache.get(name, set()) or name in assigned_today:
                     continue
 
-                # 職級強制對應
                 is_ahp = (str(s.get('role', '')).strip() == "Assistant Head Study Prefect")
                 if (role.startswith('Assist') and not is_ahp) or (not role.startswith('Assist') and is_ahp):
                     continue
 
                 form_str = student_form_map.get(name, "")
-                # 老帶新防護網
+                # 老帶新防護網觸發
                 if partner_is_junior and any(x in form_str for x in ["1", "2", "3"]):
                     continue 
 
-                # === 積分計算系統 (越低越優先) ===
+                # 積分計算系統 (分數越低越優先排班)
                 score = 0
                 w = WEIGHTS[role]
 
-                # 連續疲勞懲罰
+                # 連續疲勞懲罰與本週負荷懲罰
                 if last_duty_day.get(name, -2) == d_idx - 1: score += 1000
-                # 本週負荷懲罰
                 if current_week_weights.get(name, 0.0) + w > 3.0: score += 800
 
                 # 任務適配性 (高年級優先去管教低年級，低年級去自修室)
@@ -153,15 +152,15 @@ def generate_roster(students_df, leave_students):
                 elif 'Room303' in role or 'Room202' in role:
                     score += -40 if is_senior else 40
 
-                # 歷史累積點數權重化 (核心公平機制，強制使用 round 修正浮點數)
+                # 歷史累積點數權重化 (核心公平機制)
                 total_current_score = round(base_historical_weights.get(name, 0.0) + current_week_weights.get(name, 0.0), 2)
                 score += total_current_score * 20
                 
                 candidates.append((score, name, w))
 
             if candidates:
-                candidates.sort(key=lambda x: x[0]) # 依分數排序
-                # 從最低分的前兩名隨機挑一個，增加彈性
+                candidates.sort(key=lambda x: x[0])
+                # 從最低分的前兩名隨機挑一個
                 chosen = random.choice(candidates[:min(2, len(candidates))])
                 chosen_name = chosen[1]
                 chosen_w = chosen[2]
@@ -177,32 +176,36 @@ def generate_roster(students_df, leave_students):
     return new_roster
 
 # ==========================================
-# 5. 側邊欄：歷史檔案與名冊管理
+# 5. 側邊欄：歷史檔案與名冊管理 (含快取鎖定防呆)
 # ==========================================
 with st.sidebar:
     st.header("🗄️ 跨週數據備份區")
     
     uploaded_history = st.file_uploader("📥 導入歷史累計資料庫 (Excel)", type=["xlsx"])
+    # 快取鎖定機制：防止 Streamlit rerun 時不斷覆蓋手動編輯的數據
     if uploaded_history is not None:
-        try:
-            import_df = pd.read_excel(uploaded_history, skiprows=4)
-            if "學生姓名 (Prefect Name)" in import_df.columns:
-                import_df = import_df.rename(columns={
-                    "學生姓名 (Prefect Name)": "name", "年級 (Form)": "form", "班別 (Class)": "class",
-                    "職級 (Role)": "role", "可用日子 (Available Days)": "available",
-                    "最終總計值班次數 (次)": "history_duties", "最終總計加權負荷 (點)": "history_weight"
-                })
-            
-            for col, default in [("history_duties", 0), ("history_weight", 0.0), ("remarks", "")]:
-                if col not in import_df.columns: import_df[col] = default
-            
-            import_df["history_duties"] = pd.to_numeric(import_df["history_duties"], errors='coerce').fillna(0).astype(int)
-            import_df["history_weight"] = pd.to_numeric(import_df["history_weight"], errors='coerce').fillna(0.0).astype(float)
-            
-            st.session_state.students_df = import_df[["name", "form", "class", "role", "available", "history_duties", "history_weight", "remarks"]]
-            st.success("✅ 成功導入歷史資料，數據已跨週接軌。")
-        except Exception as e:
-            st.error("❌ 檔案解析有誤。")
+        file_id = uploaded_history.name + str(uploaded_history.size)
+        if 'last_uploaded_file' not in st.session_state or st.session_state.last_uploaded_file != file_id:
+            try:
+                import_df = pd.read_excel(uploaded_history, skiprows=4)
+                if "學生姓名 (Prefect Name)" in import_df.columns:
+                    import_df = import_df.rename(columns={
+                        "學生姓名 (Prefect Name)": "name", "年級 (Form)": "form", "班別 (Class)": "class",
+                        "職級 (Role)": "role", "可用日子 (Available Days)": "available",
+                        "最終總計值班次數 (次)": "history_duties", "最終總計加權負荷 (點)": "history_weight"
+                    })
+                
+                for col, default in [("history_duties", 0), ("history_weight", 0.0), ("remarks", "")]:
+                    if col not in import_df.columns: import_df[col] = default
+                
+                import_df["history_duties"] = pd.to_numeric(import_df["history_duties"], errors='coerce').fillna(0).astype(int)
+                import_df["history_weight"] = pd.to_numeric(import_df["history_weight"], errors='coerce').fillna(0.0).astype(float)
+                
+                st.session_state.students_df = import_df[["name", "form", "class", "role", "available", "history_duties", "history_weight", "remarks"]]
+                st.session_state.last_uploaded_file = file_id
+                st.success("✅ 成功導入歷史資料，數據已跨週接軌。")
+            except Exception as e:
+                st.error("❌ 檔案解析有誤。")
 
     st.write("---")
     st.header("👥 在線名冊與請假維護")
@@ -224,19 +227,23 @@ with st.sidebar:
     
     st.write("---")
     st.header("🛑 突發請假名單")
-    leave_students = st.multiselect("若排班前已知請假，請勾選：", options=valid_names_list, default=[])
+    # 強調為「全天請假」，直接從演算法候選池中剃除
+    leave_students = st.multiselect("若排班前已知全天請假，請勾選：", options=valid_names_list, default=[])
 
 # ==========================================
 # 6. 主畫面：排班操作與防護網
 # ==========================================
 st.markdown('<p class="main-title">🦅 SYSS STUDY PREFECT ROSTER</p>', unsafe_allow_html=True)
-st.markdown('<p class="main-subtitle">智慧公平排班平台 ｜ v4.0 旗艦雙模式版</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-subtitle">智慧公平排班平台 ｜ v5.0 終極完美版</p>', unsafe_allow_html=True)
 
 col_btn1, col_btn2 = st.columns()
 with col_btn1:
     if st.button("🚀 啟動演算：生成本週值班表", type="primary"):
-        st.session_state.roster_df = generate_roster(st.session_state.students_df, leave_students)
+        # 產生驗證種子碼，確保排班結果的隨機性可被檢驗
+        current_seed = random.randint(10000, 99999)
+        st.session_state.roster_df = generate_roster(st.session_state.students_df, leave_students, current_seed)
         st.session_state.show_clear_confirm = False
+        st.success(f"🎉 智能排班計算完成！(公平驗證種子碼: {current_seed})")
 with col_btn2:
     if st.button("🗑️ 一鍵清空", type="secondary"):
         st.session_state.show_clear_confirm = True
@@ -308,7 +315,7 @@ elif vacuum_detected:
     st.markdown('<div class="warning-alert"><b>💡 提示：存在空白崗位：</b><br>' + '<br>'.join(vacuum_entries) + '</div>', unsafe_allow_html=True)
 
 # ==========================================
-# 9. O(1) 極速統計計算
+# 9. 高效流線化統計計算
 # ==========================================
 final_records = []
 allocated_list = [(str(roster_dict.get(r, {}).get(d, "")).strip(), r) for d in DAYS for r in ROWS_ROSTER if str(roster_dict.get(r, {}).get(d, "")).strip() not in ["", "X"]]
