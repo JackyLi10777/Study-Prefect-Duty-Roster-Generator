@@ -217,21 +217,4 @@ with st.sidebar:
             "role": st.column_config.SelectboxColumn("職級", options=["Study Prefect", "Assistant Head Study Prefect"], required=True),
             "available": st.column_config.TextColumn("可用日子", default="MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY"),
             "history_duties": st.column_config.NumberColumn("歷史累計(次)", disabled=True),
-            "history_weight": st.column_config.NumberColumn("歷史累計(點)", disabled=True)
-        },
-        num_rows="dynamic", use_container_width=True, hide_index=True, key="sidebar_editor"
-    )
-    st.session_state.students_df = edited_df
-
-    valid_names_list = [str(name).strip() for name in st.session_state.students_df["name"].dropna() if str(name).strip()]
-    
-    st.write("---")
-    st.header("🛑 突發請假名單")
-    # 強調為「全天請假」，直接從演算法候選池中剃除
-    leave_students = st.multiselect("若排班前已知全天請假，請勾選：", options=valid_names_list, default=[])
-
-# ==========================================
-# 6. 主畫面：排班操作與防護網
-# ==========================================
-st.markdown('<p class="main-title">🦅 SYSS STUDY PREFECT ROSTER</p>', unsafe_allow_html=True)
-st.markdown('<p class="main-subtitle">智慧公平排班平台 ｜ v5.1 最終修復版
+            "history_weight": st.column_config.NumberColumn("歷史累計
