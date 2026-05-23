@@ -77,22 +77,15 @@ if 'leave_tracker_input' not in st.session_state:
     st.session_state.leave_tracker_input = []
 
 # ==========================================
-# 4. 數據強固清洗與自動大寫轉化函數
+# 4. 數據同步回調函數 (Callbacks)
 # ==========================================
-def clean_and_normalize_roster(df: pd.DataFrame) -> pd.DataFrame:
-    """全面清洗大表數據，去除空格、自動將小寫 x 轉為標準大寫 X，修復吞字後遺症"""
-    cleaned_df = df.copy()
-    for col in cleaned_df.columns:
-        cleaned_df[col] = cleaned_df[col].astype(str).str.strip()
-        # 核心修復：兼容小寫 x，只要轉換後是 X，就直接覆蓋為標準 "X"
-        cleaned_df[col] = cleaned_df[col].apply(lambda val: "X" if val.upper() == "X" else val)
-        # 清除 pandas 產生的 nan 字符串殘留
-        cleaned_df[col] = cleaned_df[col].apply(lambda val: "" if val == "nan" else val)
-    return cleaned_df
-
 def sync_students_data():
     if "student_editor_widget" in st.session_state and st.session_state.student_editor_widget:
         st.session_state.students_df = pd.DataFrame(st.session_state.student_editor_widget.get("current_rows", st.session_state.students_df))
+
+def sync_roster_data():
+    if "main_roster_editor_widget" in st.session_state and st.session_state.main_roster_editor_widget:
+        st.session_state.roster_df = pd.DataFrame(st.session_state.main_roster_editor_widget.get("current_rows", st.session_state.roster_df))
 
 # ==========================================
 # 5. 核心寬容型原始名冊導入引擎 (處理常規名冊)
@@ -142,29 +135,32 @@ def process_roster_import(uploaded_file):
         st.sidebar.error(f"❌ 導入失敗，格式不符。錯誤訊息: {str(e)}")
 
 # ==========================================
-# 5b. 全狀態行政備份與還原恢復引擎 (整合規格化清洗)
+# 5b. 全狀態行政備份與還原恢復引擎 (配合格式修復)
 # ==========================================
 def export_system_backup():
-    """導出前對排班大表做一次深度大寫清洗，確保導出文件無小寫 x 雜訊"""
-    normalized_roster = clean_and_normalize_roster(st.session_state.roster_df)
+    """將名冊、排班大表、請假狀態打包為統一 JSON 格式"""
     backup_data = {
         "students_list": st.session_state.students_df.to_dict(orient="records"),
-        "roster_dict": normalized_roster.to_dict(orient="index"),
+        "roster_dict": st.session_state.roster_df.to_dict(orient="index"),
         "leave_tracker": st.session_state.leave_tracker_input
     }
     return json.dumps(backup_data, ensure_ascii=False, indent=2)
 
 def import_system_backup(uploaded_json_file):
+    """解析並完整還原 JSON 格式備份數據"""
     try:
         data = json.load(uploaded_json_file)
         if "students_list" in data and "roster_dict" in data:
             st.session_state.students_df = pd.DataFrame(data["students_list"])
+            
+            # 還原排班大表並重置 Index / Columns 機制
             restored_roster = pd.DataFrame.from_dict(data["roster_dict"], orient="index")
-            # 載入時再次執行防呆與格式化
-            reindexed_roster = restored_roster.reindex(index=ROWS_ROSTER, columns=DAYS).fillna("")
-            st.session_state.roster_df = clean_and_normalize_roster(reindexed_roster)
+            # 強制對齊預設常數結構防呆
+            st.session_state.roster_df = restored_roster.reindex(index=ROWS_ROSTER, columns=DAYS).fillna("")
+            
+            # 還原請假名單
             st.session_state.leave_tracker_input = data.get("leave_tracker", [])
-            st.sidebar.success("🔮 全狀態行政數據已成功完美還原！")
+            st.sidebar.success("🔮 全狀態行政數據已成功完美還原（含名冊、大表與請假紀錄）！")
             st.rerun()
         else:
             st.sidebar.error("❌ 備份檔解析失敗：未包含核心名冊或班表數據。")
@@ -172,7 +168,7 @@ def import_system_backup(uploaded_json_file):
         st.sidebar.error(f"❌ 備份還原失敗，格式錯誤: {str(e)}")
 
 # ==========================================
-# 6. 核心排班演算法 (支援手動大/小寫 "X" 自動鎖定)
+# 6. 核心排班演算法 (雙軌支援大表手動 "X" 鎖定)
 # ==========================================
 def generate_roster(students_df: pd.DataFrame, leave_students: list, special_closures: list, seed: int) -> pd.DataFrame:
     if students_df.empty or students_df['name'].str.strip().eq('').all():
@@ -181,12 +177,10 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
     rng = random.Random(seed)
     new_roster = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
 
-    # 讀取當前大表的鎖定狀態（將小寫 x 自動當作 X 鎖定處理）
     for r in ROWS_ROSTER:
         for d in DAYS:
             if r in st.session_state.roster_df.index and d in st.session_state.roster_df.columns:
-                val_upper = str(st.session_state.roster_df.at[r, d]).strip().upper()
-                if val_upper == "X":
+                if str(st.session_state.roster_df.at[r, d]).strip().upper() == "X":
                     new_roster.at[r, d] = "X"
 
     for item in special_closures:
@@ -289,7 +283,7 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
     return new_roster
 
 # ==========================================
-# 7. 全局數據審計與雙軌統計（全面兼大小寫不敏感）
+# 7. 全局數據審計與雙軌統計（完整保留次數與點數）
 # ==========================================
 def validate_and_compute(roster_df: pd.DataFrame, students_df: pd.DataFrame, leave_students: list):
     valid_names = set(str(name).strip() for name in students_df["name"].dropna() if str(name).strip())
@@ -307,15 +301,13 @@ def validate_and_compute(roster_df: pd.DataFrame, students_df: pd.DataFrame, lea
         day_assigned_map = {}
         for r in ROWS_ROSTER:
             val = str(roster_df.at[r, d]).strip()
-            
             if not val:
                 if not ('Room202' in r and d in ['TUESDAY', 'FRIDAY']):
                     vacuum_detected = True
                     vacuum_entries.append(f"【{d} — {r}】")
                 continue
             
-            # 核心修復：審計邏輯全面排除大小寫 X/x 鎖定
-            if val.upper() == "X":
+            if val == "X":
                 continue
 
             if val not in valid_names:
@@ -375,17 +367,17 @@ def validate_and_compute(roster_df: pd.DataFrame, students_df: pd.DataFrame, lea
 # ==========================================
 def recommend_substitutes(roster_df, students_df, chosen_day, chosen_role):
     current_person = str(roster_df.at[chosen_role, chosen_day]).strip()
-    if current_person.upper() == "X" or current_person == "":
+    if current_person in ["", "X"]:
         return None, "該時段無需替補、為常規關閉或目前不開放。"
 
-    assigned_today = {str(roster_df.at[r, chosen_day]).strip() for r in ROWS_ROSTER if str(roster_df.at[r, chosen_day]).strip().upper() not in ["", "X"]}
+    assigned_today = {str(roster_df.at[r, chosen_day]).strip() for r in ROWS_ROSTER if str(roster_df.at[r, chosen_day]).strip() not in ["", "X"]}
     is_ahp_required = chosen_role.startswith('Assist')
     partner_is_junior = False
 
     if "- 2" in chosen_role or "- 1" in chosen_role:
         partner_role = chosen_role.replace("- 2", "- 1") if "- 2" in chosen_role else chosen_role.replace("- 1", "- 2")
         partner_name = str(roster_df.at[partner_role, chosen_day]).strip()
-        if partner_name.upper() not in ["", "X"]:
+        if partner_name not in ["", "X"]:
             p_match = students_df[students_df["name"].str.strip() == partner_name]
             if not p_match.empty and "3" in str(p_match.iloc[0].get("form", "")):
                 partner_is_junior = True
@@ -427,9 +419,7 @@ def recommend_substitutes(roster_df, students_df, chosen_day, chosen_role):
 # ==========================================
 def generate_pdf(roster_df, master_report_df, logo_b64=None):
     today = datetime.date.today().strftime("%Y-%m-%d")
-    # 導出 PDF 前先規格化班表
-    normalized_roster = clean_and_normalize_roster(roster_df)
-    html_table = normalized_roster.to_html(classes='table')
+    html_table = roster_df.to_html(classes='table')
     report_table = master_report_df[["學生姓名 (Prefect Name)", "年級 (Form)", "班別 (Class)", "職級 (Role)", "當週新增 (次)", "最終總計加權負荷 (點)"]].to_html(index=False, classes='table')
     
     html = f"""
@@ -485,6 +475,7 @@ with st.sidebar:
     st.write("---")
     st.markdown("### 💾 數據備份與還原恢復 (全狀態)")
     
+    # 【全面補全：全狀態行政導出備份按鈕】
     if not st.session_state.students_df.empty:
         json_backup_string = export_system_backup()
         st.download_button(
@@ -495,6 +486,7 @@ with st.sidebar:
             use_container_width=True
         )
     
+    # 【配合格式：全狀態還原通道】
     uploaded_backup = st.file_uploader("上傳全狀態行政備份還原數據 (JSON)：", type=["json"], key="backup_restorer")
     if uploaded_backup is not None:
         if st.button("確認從此備份還原系統", type="secondary", use_container_width=True):
@@ -536,13 +528,19 @@ with st.sidebar:
     st.write("---")
     st.markdown("### 🛑 突發臨時請假登記")
     valid_names_list = [str(name).strip() for name in st.session_state.students_df["name"].dropna() if str(name).strip()]
-    leave_students = st.multiselect("選取今日請假人員：", options=valid_names_list, key="leave_tracker_input")
+    
+    # 綁定與格式連動的 State 機制
+    leave_students = st.multiselect(
+        "選取今日請假人員：", 
+        options=valid_names_list, 
+        key="leave_tracker_input"
+    )
 
 # ==========================================
 # 11. 主畫面大數據控制中心
 # ==========================================
 st.markdown('<p class="main-title">🦅 SING YIN STUDY PREFECT ROSTER</p>', unsafe_allow_html=True)
-st.markdown('<p class="main-subtitle">F.3–F.5 Study Prefect Smart Scheduling Platform | v13.5 防吞字大小寫相容版</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-subtitle">F.3–F.5 Study Prefect Smart Scheduling Platform | v13.0 全狀態強固備份完全體</p>', unsafe_allow_html=True)
 
 closure_options = [f"{d} - {room}" for d in DAYS for room in ["Room302", "Room303", "Room202"] if not (room == "Room202" and d in ["TUESDAY", "FRIDAY"])]
 selected_closures = st.multiselect("🛠️ 設定本週「特殊不開放」時段（或直接在下方表格內打 X 鎖定）：", options=closure_options, key="special_closures")
@@ -570,9 +568,6 @@ if st.session_state.show_clear_confirm:
     if c2.button("❌ 取消返回"):
         st.session_state.show_clear_confirm = False
         st.rerun()
-
-# 🛡️ 核心修復點：在執行大數據審計前，全面執行一次班表格式清洗轉化，使小寫 x 自動變大寫
-st.session_state.roster_df = clean_and_normalize_roster(st.session_state.roster_df)
 
 audit_results = validate_and_compute(st.session_state.roster_df, st.session_state.students_df, leave_students)
 typo_detected, invalid_entries = audit_results["typo"]
@@ -611,14 +606,13 @@ if leave_conflict_detected:
         st.rerun()
 
 elif vacuum_detected:
-    st.markdown('<div class="warning-alert"><b>💡 提示：存在未配對的開門空缺（手動填寫 X 代表不開放）：</b><br>' + '<br>'.join(vacuum_entries) + '</div>', unsafe_allow_html=True)
+    st.markdown('<div class="warning-alert"><b>💡 提示：存在未配對的開門空缺（若手動填寫 X 代表不開放則忽略此訊息）：</b><br>' + '<br>'.join(vacuum_entries) + '</div>', unsafe_allow_html=True)
 
 # ==========================================
 # 13. 雙軌呈現中心
 # ==========================================
 def apply_cell_style(val, role, day):
-    # 核心修復：渲染公告時，不論大寫小寫，一律轉大寫
-    val = str(val).strip().upper()
+    val = str(val).strip()
     if val == "X": return "color: #EF4444; font-weight: bold; text-align: center; background-color: #FEF2F2;"
     if 'Room202' in role and day in ['TUESDAY', 'FRIDAY']:
         return "background-color: #E5E7EB; color: #9CA3AF; text-align: center; font-style: italic;"
@@ -634,10 +628,9 @@ def apply_cell_style(val, role, day):
 tab_edit, tab_view = st.tabs(["✏️ 互動式手動微調大表", "🎨 聖言色彩公告預覽"])
 
 with tab_edit:
-    # 🛡️ 核心 Bug 修復：移除 on_change=sync_roster_data，將主表格控制權完全還給 Streamlit 機制，徹底避免吞字
     st.session_state.roster_df = st.data_editor(
         st.session_state.roster_df, use_container_width=True, height=280, 
-        key="main_roster_editor_widget"
+        key="main_roster_editor_widget", on_change=sync_roster_data
     )
 
 with tab_view:
@@ -661,7 +654,7 @@ with sub_col2:
     chosen_role = st.selectbox("請選取需要補位的崗位：", ROWS_ROSTER, key="sub_role_sel")
 with sub_col3:
     current_person = str(st.session_state.roster_df.at[chosen_role, chosen_day]).strip()
-    st.text_input("目前該崗位原定人員：", value=current_person if current_person.upper() not in ["", "X"] else "（空缺 / 常規不開放）", disabled=True)
+    st.text_input("目前該崗位原定人員：", value=current_person if current_person not in ["", "X"] else "（空缺 / 常規不開放）", disabled=True)
 
 if st.button("🔍 執行智慧替補媒合分析", type="primary"):
     if 'Room202' in chosen_role and chosen_day in ['TUESDAY', 'FRIDAY']:
@@ -677,38 +670,35 @@ if st.button("🔍 執行智慧替補媒合分析", type="primary"):
 # ==========================================
 # 15. 工作量公平性數據化審計圖表
 # ==========================================
-if not master_report_df.empty and not typo_detected:
-    st.write("---")
-    st.markdown("### 📊 全體動態工作量公平性監控審計")
+if not master_report_df.empty:
+    st.write("-----")
+    st.markdown("### 📊 工作量公平性數據化審計中心")
     
-    median_load = master_report_df['最終總計加權負荷 (點)'].median()
+    # 雙欄布局：左側顯示數據表格，右側顯示動態監控圖表
+    c_out1, c_out2 = st.columns([7, 3])
     
-    fig = px.bar(
-        master_report_df, 
-        x='學生姓名 (Prefect Name)', 
-        y='最終總計加權負荷 (點)', 
-        text_auto='.1f', 
-        color='最終總計加權負荷 (點)',
-        color_continuous_scale='YlOrBr',
-        labels={'最終總計加權負荷 (點)': '最終總加權負荷 (點)'},
-        title=f"全體累積工作點數監控（當前全隊負荷中位數公平線：{median_load:.1f} 點）"
-    )
-    
-    fig.add_hline(
-        y=median_load, 
-        line_dash="dash", 
-        line_color="#EF4444", 
-        annotation_text=f"公平基準線 (中位數: {median_load:.1f} 點)", 
-        annotation_position="top right"
-    )
-    
-    fig.update_layout(
-        xaxis_title="領袖生姓名",
-        yaxis_title="總加權負荷 (歷史 + 本週)",
-        hovermode="x unified",
-        margin=dict(l=20, r=20, t=60, b=20)
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
-
-st.caption("Sing Yin Secondary School Study Prefect Administration System | Version 13.5 防吞字大小寫相容版")
+    with c_out1:
+        st.markdown("##### 🔍 全員工作負載審計清單 (按最終加權總計點數由低到高排序)")
+        sorted_report_df = master_report_df.sort_values(by='最終總計加權負荷 (點)')
+        st.dataframe(sorted_report_df, use_container_width=True, hide_index=True)
+        
+    with c_out2:
+        st.markdown("##### 🦅 全體累積工作點數監控圖表")
+        fig = px.bar(
+            master_report_df, 
+            x='學生姓名 (Prefect Name)', 
+            y='最終總計加權負荷 (點)', 
+            text_auto='.2f', 
+            title="全體累積工作點數監控", 
+            color='最終總計加權負荷 (點)', 
+            color_continuous_scale='gold'
+        )
+        fig.update_layout(
+            xaxis_title="領袖生姓名",
+            yaxis_title="總計點數 (點)",
+            coloraxis_showscale=False,
+            margin=dict(l=10, r=10, t=40, b=10)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("💡 暫無統計數據。請導入名冊並生成班表後查看公平性審計圖表。")
