@@ -63,7 +63,7 @@ if 'show_clear_confirm' not in st.session_state:
     st.session_state.show_clear_confirm = False
 
 # ==========================================
-# 4. 核心排班演算法
+# 4. 核心排班演算法（已修正開放規則）
 # ==========================================
 def generate_roster(students_df: pd.DataFrame, leave_students: list, seed: int) -> pd.DataFrame:
     if students_df.empty or students_df['name'].str.strip().eq('').all():
@@ -93,6 +93,7 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, seed: int) 
     for d_idx, day in enumerate(DAYS):
         assigned_today = set()
         for role in ROWS_ROSTER:
+            # Sing Yin 實際開放規則
             if 'Room202' in role and day in ['TUESDAY', 'FRIDAY']:
                 new_roster.at[role, day] = ""
                 continue
@@ -205,8 +206,6 @@ def recommend_substitutes(roster_df, students_df, chosen_day, chosen_role):
         return None, "該時段無需替補"
 
     _, _, _, _, master_df = validate_and_compute(roster_df, students_df)
-    student_lookup = {row["學生姓名 (Prefect Name)"]: row for _, row in master_df.iterrows()}
-
     assigned_today = {str(roster_df.at[r, chosen_day]).strip() 
                      for r in ROWS_ROSTER if str(roster_df.at[r, chosen_day]).strip() not in ["", "X"]}
 
@@ -217,8 +216,8 @@ def recommend_substitutes(roster_df, students_df, chosen_day, chosen_role):
         partner_role = chosen_role.replace("- 2", "- 1") if "- 2" in chosen_role else chosen_role.replace("- 1", "- 2")
         partner_name = str(roster_df.at[partner_role, chosen_day]).strip()
         if partner_name not in ["", "X"]:
-            p_rec = student_lookup.get(partner_name)
-            if p_rec and "3" in str(p_rec.get("年級 (Form)", "")):
+            p_rec = master_df[master_df["學生姓名 (Prefect Name)"] == partner_name]
+            if not p_rec.empty and "3" in str(p_rec.iloc[0]["年級 (Form)"]):
                 partner_is_junior = True
 
     candidates = []
@@ -241,7 +240,35 @@ def recommend_substitutes(roster_df, students_df, chosen_day, chosen_role):
     return None, "找不到符合條件的替補人員"
 
 # ==========================================
-# 7. 側邊欄
+# 7. PDF 生成
+# ==========================================
+def generate_pdf(roster_df, master_report_df, logo_b64=None):
+    today = datetime.date.today().strftime("%Y-%m-%d")
+    html = f"""
+    <html><head><meta charset="UTF-8">
+    <style>
+        body {{font-family: Arial, sans-serif; margin:40px;}}
+        h1 {{color:#0C2340; text-align:center;}}
+        h2 {{color:#D4AF37;}}
+        table {{width:100%; border-collapse:collapse; margin:20px 0;}}
+        th, td {{border:1px solid #aaa; padding:8px; text-align:center;}}
+        th {{background:#0C2340; color:white;}}
+        .assist {{background:#FFF8E1;}} .room302 {{background:#D1FAE5;}}
+        .room303 {{background:#FEE2E2;}} .room202 {{background:#FEF3C7;}}
+    </style></head><body>
+    <h1>Sing Yin Secondary School</h1>
+    <h2>Study Prefect Duty Roster</h2>
+    <p style="text-align:center;">{today}</p>
+    """
+    if logo_b64:
+        html += f'<img src="data:image/png;base64,{logo_b64}" style="display:block;margin:20px auto;width:160px;">'
+    html += "<h3>本週值班表</h3>" + roster_df.to_html(escape=False)
+    html += "<h3>全體工作量統計</h3>" + master_report_df.to_html(index=False, escape=False)
+    html += "</body></html>"
+    return HTML(string=html).write_pdf()
+
+# ==========================================
+# 8. 側邊欄
 # ==========================================
 with st.sidebar:
     st.header("🏫 Sing Yin Secondary School")
@@ -328,7 +355,7 @@ with col3:
             st.info("PDF 功能需 weasyprint 支援")
 
 # ==========================================
-# Tabs + 驗證 + 完整替補系統
+# Tabs、驗證、完整替補系統
 # ==========================================
 typo_detected, vacuum_detected, invalid_entries, vacuum_entries, master_report_df = \
     validate_and_compute(st.session_state.roster_df, st.session_state.students_df)
@@ -345,14 +372,14 @@ with tab_edit:
 with tab_view:
     st.dataframe(st.session_state.roster_df.style.apply(lambda col: ["color: #EF4444; font-weight: bold;" if v == "X" else "" for v in col], axis=0), use_container_width=True, height=320)
 
-# 完整智慧替補系統
+# 完整替補系統
 st.write("---")
 st.subheader("🔄 突發請假？智慧替補推薦系統")
 c_sub1, c_sub2 = st.columns(2)
 with c_sub1:
-    chosen_day = st.selectbox("請假日期", DAYS, key="sub_day")
+    chosen_day = st.selectbox("請假日期", DAYS)
 with c_sub2:
-    chosen_role = st.selectbox("請假崗位", ROWS_ROSTER, key="sub_role")
+    chosen_role = st.selectbox("請假崗位", ROWS_ROSTER)
 
 current_person = str(st.session_state.roster_df.at[chosen_role, chosen_day]).strip()
 st.text_input("目前該時段人員", value=current_person if current_person not in ["", "X"] else "（無人）", disabled=True)
@@ -365,11 +392,11 @@ if st.button("🔍 尋找最優替補", type="primary"):
     else:
         st.warning(msg)
 
-# 圖表與匯出
+# 圖表
 if not master_report_df.empty:
     st.write("---")
     st.subheader("📊 全體工作量公平性監控")
     fig = px.bar(master_report_df, x='學生姓名 (Prefect Name)', y='最終總計加權負荷 (點)', text_auto='.1f', color_continuous_scale='YlOrBr')
     st.plotly_chart(fig, use_container_width=True)
 
-st.caption("Sing Yin Secondary School Study Prefect Platform | v8.1 最終完整版")
+st.caption("Sing Yin Secondary School Study Prefect Platform | v8.1 最終完整穩定版")
