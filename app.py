@@ -88,7 +88,7 @@ def sync_roster_data():
         st.session_state.roster_df = pd.DataFrame(st.session_state.main_roster_editor_widget.get("current_rows", st.session_state.roster_df))
 
 # ==========================================
-# 5. 核心寬容型原始名冊導入引擎 (處理常規名冊)
+# 5. 核心寬容型原始名冊導入引擎
 # ==========================================
 def process_roster_import(uploaded_file):
     try:
@@ -135,40 +135,74 @@ def process_roster_import(uploaded_file):
         st.sidebar.error(f"❌ 導入失敗，格式不符。錯誤訊息: {str(e)}")
 
 # ==========================================
-# 5b. 全狀態行政備份與還原恢復引擎 (配合格式修復)
+# 5b. 數據備份導出與還原恢復引擎（配合大表格式）
 # ==========================================
-def export_system_backup():
-    """將名冊、排班大表、請假狀態打包為統一 JSON 格式"""
+def export_system_backup(master_df):
+    """
+    將最新計算的大表數據與排班狀態、請假登記整合備份
+    還原時可直接提煉出符合名冊要求的歷史與基本欄位
+    """
     backup_data = {
-        "students_list": st.session_state.students_df.to_dict(orient="records"),
-        "roster_dict": st.session_state.roster_df.to_dict(orient="index"),
+        "master_report": master_df.to_dict(orient="records"),
+        "roster_table": st.session_state.roster_df.to_dict(orient="index"),
         "leave_tracker": st.session_state.leave_tracker_input
     }
     return json.dumps(backup_data, ensure_ascii=False, indent=2)
 
 def import_system_backup(uploaded_json_file):
-    """解析並完整還原 JSON 格式備份數據"""
+    """
+    從全狀態 JSON 備份檔中提煉還原出基礎名冊與排班表
+    """
     try:
         data = json.load(uploaded_json_file)
-        if "students_list" in data and "roster_dict" in data:
-            st.session_state.students_df = pd.DataFrame(data["students_list"])
+        if "master_report" in data and "roster_table" in data:
+            # 從大表結構逆向提煉出基礎名冊所需的欄位，確保資料完全對接不失真
+            raw_master = pd.DataFrame(data["master_report"])
             
-            # 還原排班大表並重置 Index / Columns 機制
-            restored_roster = pd.DataFrame.from_dict(data["roster_dict"], orient="index")
-            # 強制對齊預設常數結構防呆
+            mapping_reverse = {
+                "學生姓名 (Prefect Name)": "name",
+                "年級 (Form)": "form",
+                "班別 (Class)": "class",
+                "職級 (Role)": "role",
+                "學年固定總值班": "fixed_general_duty",
+                "最終總計值班次數 (次)": "history_duties",
+                "最終總計加權負荷 (點)": "history_weight",
+                "備註": "remarks"
+            }
+            
+            # 若備份檔案中不含有可用日子，則預設全開
+            if "可用日子" not in raw_master.columns:
+                raw_master["available"] = "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY"
+                
+            renamed_df = raw_master.rename(columns=mapping_reverse)
+            required_cols = ["name", "form", "class", "role", "fixed_general_duty", "available", "history_duties", "history_weight", "remarks"]
+            
+            # 確保所有核心欄位健在
+            for col in required_cols:
+                if col not in renamed_df.columns:
+                    if col == "fixed_general_duty": renamed_df[col] = "NONE"
+                    elif col == "history_duties": renamed_df[col] = 0
+                    elif col == "history_weight": renamed_df[col] = 0.0
+                    else: renamed_df[col] = ""
+            
+            st.session_state.students_df = renamed_df[required_cols]
+            
+            # 還原主排班表結構
+            restored_roster = pd.DataFrame.from_dict(data["roster_table"], orient="index")
             st.session_state.roster_df = restored_roster.reindex(index=ROWS_ROSTER, columns=DAYS).fillna("")
             
             # 還原請假名單
             st.session_state.leave_tracker_input = data.get("leave_tracker", [])
-            st.sidebar.success("🔮 全狀態行政數據已成功完美還原（含名冊、大表與請假紀錄）！")
+            
+            st.sidebar.success("🔮 備份數據已成功完美還原（已同步校準名冊與值班大表）！")
             st.rerun()
         else:
-            st.sidebar.error("❌ 備份檔解析失敗：未包含核心名冊或班表數據。")
+            st.sidebar.error("❌ 備份檔解析失敗：結構不符合 master_report 規範。")
     except Exception as e:
         st.sidebar.error(f"❌ 備份還原失敗，格式錯誤: {str(e)}")
 
 # ==========================================
-# 6. 核心排班演算法 (雙軌支援大表手動 "X" 鎖定)
+# 6. 核心排班演算法
 # ==========================================
 def generate_roster(students_df: pd.DataFrame, leave_students: list, special_closures: list, seed: int) -> pd.DataFrame:
     if students_df.empty or students_df['name'].str.strip().eq('').all():
@@ -283,7 +317,7 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
     return new_roster
 
 # ==========================================
-# 7. 全局數據審計與雙軌統計（完整保留次數與點數）
+# 7. 全局數據審計與雙軌統計大表計算中心
 # ==========================================
 def validate_and_compute(roster_df: pd.DataFrame, students_df: pd.DataFrame, leave_students: list):
     valid_names = set(str(name).strip() for name in students_df["name"].dropna() if str(name).strip())
@@ -457,7 +491,7 @@ def generate_pdf(roster_df, master_report_df, logo_b64=None):
     return HTML(string=html).write_pdf()
 
 # ==========================================
-# 10. 側邊欄：大數據維護與「名冊/備份雙引導通道」
+# 10. 側邊欄：大數據維護與「名冊/大表備份雙引導通道」
 # ==========================================
 with st.sidebar:
     st.markdown("### 🦅 校徽與行政系統")
@@ -473,21 +507,27 @@ with st.sidebar:
             process_roster_import(uploaded_roster)
 
     st.write("---")
-    st.markdown("### 💾 數據備份與還原恢復 (全狀態)")
+    st.markdown("### 💾 數據備份與還原恢復 (對接大表)")
     
-    # 【全面補全：全狀態行政導出備份按鈕】
-    if not st.session_state.students_df.empty:
-        json_backup_string = export_system_backup()
+    # 事先計算當前的大表狀態，提供給備份下載按鈕使用
+    audit_results_pre = validate_and_compute(st.session_state.roster_df, st.session_state.students_df, st.session_state.leave_tracker_input)
+    current_master_df = audit_results_pre["report_df"]
+    
+    # 補全：當大表有資料時，開放全狀態行政數據導出
+    if not current_master_df.empty:
+        json_backup_string = export_system_backup(current_master_df)
         st.download_button(
-            label="⬇️ 導出當前全狀態行政備份 (JSON)",
+            label="⬇️ 導出當前大表全狀態備份 (JSON)",
             data=json_backup_string,
-            file_name=f"SYSS_Full_Roster_Backup_{datetime.date.today().strftime('%Y%m%d')}.json",
+            file_name=f"SYSS_Master_Roster_Backup_{datetime.date.today().strftime('%Y%m%d')}.json",
             mime="application/json",
             use_container_width=True
         )
+    else:
+        st.button("⬇️ 導出備份 (請先載入名冊)", disabled=True, use_container_width=True)
     
-    # 【配合格式：全狀態還原通道】
-    uploaded_backup = st.file_uploader("上傳全狀態行政備份還原數據 (JSON)：", type=["json"], key="backup_restorer")
+    # 配合大表格式的還原恢復入口
+    uploaded_backup = st.file_uploader("上傳大表結構備份數據 (JSON)：", type=["json"], key="backup_restorer")
     if uploaded_backup is not None:
         if st.button("確認從此備份還原系統", type="secondary", use_container_width=True):
             import_system_backup(uploaded_backup)
@@ -529,7 +569,6 @@ with st.sidebar:
     st.markdown("### 🛑 突發臨時請假登記")
     valid_names_list = [str(name).strip() for name in st.session_state.students_df["name"].dropna() if str(name).strip()]
     
-    # 綁定與格式連動的 State 機制
     leave_students = st.multiselect(
         "選取今日請假人員：", 
         options=valid_names_list, 
@@ -540,7 +579,7 @@ with st.sidebar:
 # 11. 主畫面大數據控制中心
 # ==========================================
 st.markdown('<p class="main-title">🦅 SING YIN STUDY PREFECT ROSTER</p>', unsafe_allow_html=True)
-st.markdown('<p class="main-subtitle">F.3–F.5 Study Prefect Smart Scheduling Platform | v13.0 全狀態強固備份完全體</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-subtitle">F.3–F.5 Study Prefect Smart Scheduling Platform | v14.0 格式對接安全版</p>', unsafe_allow_html=True)
 
 closure_options = [f"{d} - {room}" for d in DAYS for room in ["Room302", "Room303", "Room202"] if not (room == "Room202" and d in ["TUESDAY", "FRIDAY"])]
 selected_closures = st.multiselect("🛠️ 設定本週「特殊不開放」時段（或直接在下方表格內打 X 鎖定）：", options=closure_options, key="special_closures")
@@ -674,7 +713,6 @@ if not master_report_df.empty:
     st.write("-----")
     st.markdown("### 📊 工作量公平性數據化審計中心")
     
-    # 雙欄布局：左側顯示數據表格，右側顯示動態監控圖表
     c_out1, c_out2 = st.columns([7, 3])
     
     with c_out1:
