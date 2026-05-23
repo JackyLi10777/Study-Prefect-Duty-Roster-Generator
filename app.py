@@ -163,7 +163,7 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
     for _, s in students_df.iterrows():
         name = str(s.get('name', '')).strip()
         fixed_day = str(s.get('fixed_general_duty', '')).strip().upper()
-        if name and fixed_day in DAYS and new_roster.at['Micro charge', fixed_day] != "X":
+        if name and fixed_day in DAYS and new_roster.at['Assist. in charge (General Duty)', fixed_day] != "X":
             new_roster.at['Assist. in charge (General Duty)', fixed_day] = name
 
     students = students_df.to_dict('records')
@@ -313,12 +313,12 @@ def validate_and_compute(roster_df: pd.DataFrame, students_df: pd.DataFrame, lea
             "班別 (Class)": s.get('class', ''),
             "職級 (Role)": s.get('role', ''),
             "學年固定總值班": s.get('fixed_general_duty', ''),
-            "歷史累計 (次)": int(s.get('history_duties', 0)),
-            "歷史累計 (點)": float(s.get('history_weight', 0.0)),
+            "歷史累計 (次)": int(s.get('history_duties', 0)) if pd.notna(s.get('history_duties')) else 0,
+            "歷史累計 (點)": float(s.get('history_weight', 0.0)) if pd.notna(s.get('history_weight')) else 0.0,
             "當週新增 (次)": this_week_duties,
             "當週新增 (點)": round(this_week_weight, 1),
-            "最終總計值班次數 (次)": int(s.get('history_duties', 0)) + this_week_duties,
-            "最終總計加權負荷 (點)": round(float(s.get('history_weight', 0.0)) + this_week_weight, 1),
+            "最終總計值班次數 (次)": (int(s.get('history_duties', 0)) if pd.notna(s.get('history_duties')) else 0) + this_week_duties,
+            "最終總計加權負荷 (點)": round((float(s.get('history_weight', 0.0)) if pd.notna(s.get('history_weight')) else 0.0) + this_week_weight, 1),
             "備註": s.get('remarks', '')
         })
         
@@ -375,7 +375,7 @@ def recommend_substitutes(roster_df, students_df, chosen_day, chosen_role):
         candidates.append({
             "學生姓名 (Prefect Name)": name,
             "年級 (Form)": s.get('form', ''),
-            "最終總計加權負荷 (點)": round(float(s.get('history_weight', 0.0)) + this_week_weight, 1)
+            "最終總計加權負荷 (點)": round((float(s.get('history_weight', 0.0)) if pd.notna(s.get('history_weight')) else 0.0) + this_week_weight, 1)
         })
 
     if candidates:
@@ -501,7 +501,7 @@ with st.sidebar:
 # 11. 主畫面大數據控制中心 (補回二次確認防呆機制)
 # ==========================================
 st.markdown('<p class="main-title">🦅 SING YIN STUDY PREFECT ROSTER</p>', unsafe_allow_html=True)
-st.markdown('<p class="main-subtitle">F.3–F.5 Study Prefect Smart Scheduling Platform | v12.0 終極完美合體版</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-subtitle">F.3–F.5 Study Prefect Smart Scheduling Platform | v12.0 終極完美合體完全體</p>', unsafe_allow_html=True)
 
 closure_options = [f"{d} - {room}" for d in DAYS for room in ["Room302", "Room303", "Room202"] if not (room == "Room202" and d in ["TUESDAY", "FRIDAY"])]
 selected_closures = st.multiselect("🛠️ 設定本週「特殊不開放」時段（或直接在下方表格內打 X 鎖定）：", options=closure_options, key="special_closures")
@@ -631,11 +631,14 @@ if st.button("🔍 執行智慧替補媒合分析", type="primary"):
             st.warning(msg)
 
 # ==========================================
-# 15. 工作量公平性數據化審計圖表
+# 15. 工作量公平性數據化審計圖表 (融入全隊負荷中位數公平基準線)
 # ==========================================
 if not master_report_df.empty and not typo_detected:
     st.write("---")
     st.markdown("### 📊 全體動態工作量公平性監控審計")
+    
+    # 動態計算全隊最终總計負荷的中位數 (Median Load)
+    median_load = master_report_df['最終總計加權負荷 (點)'].median()
     
     fig = px.bar(
         master_report_df, 
@@ -644,8 +647,26 @@ if not master_report_df.empty and not typo_detected:
         text_auto='.1f', 
         color='最終總計加權負荷 (點)',
         color_continuous_scale='YlOrBr',
-        labels={'最終總計加權負荷 (點)': '最終總加權負荷 (點)'}
+        labels={'最終總計加權負荷 (點)': '最終總加權負荷 (點)'},
+        title=f"全體累積工作點數監控（當前全隊負荷中位數公平線：{median_load:.1f} 點）"
     )
+    
+    # 完美注入公平中位數虛線基準線
+    fig.add_hline(
+        y=median_load, 
+        line_dash="dash", 
+        line_color="#EF4444", 
+        annotation_text=f"公平基準線 (中位數: {median_load:.1f} 點)", 
+        annotation_position="top right"
+    )
+    
+    fig.update_layout(
+        xaxis_title="領袖生姓名",
+        yaxis_title="總加權負荷 (歷史 + 本週)",
+        hovermode="x unified",
+        margin=dict(l=20, r=20, t=60, b=20)
+    )
+    
     st.plotly_chart(fig, use_container_width=True)
 
 st.caption("Sing Yin Secondary School Study Prefect Administration System | Version 12.0 終極合體完全體")
