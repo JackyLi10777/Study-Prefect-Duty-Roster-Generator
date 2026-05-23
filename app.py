@@ -297,9 +297,7 @@ with head_col2:
                 st.success("🎉 值班表已成功生成！")
 
 if st.session_state.students_df.empty:
-    st.info("👋 歡迎使用！
-請先在左側邊欄【建立學生名單】
-或點擊【載入一鍵測試範例數據】開始。")
+    st.info("👋 歡迎使用！請先在左側邊欄【建立學生名單】或點擊【載入一鍵測試範例數據】開始。")
 else:
     if st.button("🔄 重新生成（重置全新排班方案）"):
         with st.spinner("正在重新計算..."):
