@@ -165,11 +165,29 @@ def generate_roster(students_df, leave_students, seed):
     return new_roster
 
 # ==========================================
-# 5. 側邊欄：歷史檔案與名冊管理 (含快取鎖定防呆)
+# 5. 側邊欄：歷史檔案與名冊管理
 # ==========================================
 with st.sidebar:
     st.header("🗄️ 跨週數據備份區")
     
+    # 【新增功能】一鍵載入高畫質行政示範數據
+    if st.button("💡 一鍵載入行政示範數據", type="secondary"):
+        demo_prefects = [
+            {"name": "Alice Chan", "form": "F.5", "class": "5A", "role": "Assistant Head Study Prefect", "available": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY", "history_duties": 5, "history_weight": 5.0, "remarks": "隊長/經驗豐富"},
+            {"name": "Bob Wong", "form": "F.6", "class": "6B", "role": "Assistant Head Study Prefect", "available": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY", "history_duties": 4, "history_weight": 4.5, "remarks": "副隊長"},
+            {"name": "Charlie Li", "form": "F.4", "class": "4C", "role": "Study Prefect", "available": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY", "history_duties": 3, "history_weight": 4.0, "remarks": ""},
+            {"name": "David Cheung", "form": "F.3", "class": "3A", "role": "Study Prefect", "available": "MONDAY,WEDNESDAY,FRIDAY", "history_duties": 2, "history_weight": 3.0, "remarks": "初中/週二四補習"},
+            {"name": "Eva Lau", "form": "F.1", "class": "1B", "role": "Study Prefect", "available": "TUESDAY,WEDNESDAY,THURSDAY", "history_duties": 0, "history_weight": 0.0, "remarks": "新人/需老帶新"},
+            {"name": "Frank Ho", "form": "F.2", "class": "2C", "role": "Study Prefect", "available": "MONDAY,TUESDAY,FRIDAY", "history_duties": 1, "history_weight": 1.5, "remarks": "初中"},
+            {"name": "Grace Ng", "form": "F.5", "class": "5B", "role": "Study Prefect", "available": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY", "history_duties": 2, "history_weight": 2.5, "remarks": ""},
+            {"name": "Henry Mak", "form": "F.6", "class": "6A", "role": "Study Prefect", "available": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY", "history_duties": 3, "history_weight": 3.5, "remarks": "即將畢業"},
+            {"name": "Ivy Tsang", "form": "F.4", "class": "4A", "role": "Study Prefect", "available": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY", "history_duties": 2, "history_weight": 2.5, "remarks": ""},
+            {"name": "Jack Lam", "form": "F.2", "class": "2D", "role": "Study Prefect", "available": "TUESDAY,WEDNESDAY,THURSDAY,FRIDAY", "history_duties": 1, "history_weight": 1.5, "remarks": "初中"}
+        ]
+        st.session_state.students_df = pd.DataFrame(demo_prefects)
+        st.success("🎉 示範名冊載入成功！請至右側點擊『啟動演算』觀看排班效果。")
+        st.rerun()
+
     uploaded_history = st.file_uploader("📥 導入歷史累計資料庫 (Excel)", type=["xlsx"])
     if uploaded_history is not None:
         file_id = uploaded_history.name + str(uploaded_history.size)
@@ -221,7 +239,7 @@ with st.sidebar:
 # 6. 主畫面：排班操作與防護網
 # ==========================================
 st.markdown('<p class="main-title">🦅 SYSS STUDY PREFECT ROSTER</p>', unsafe_allow_html=True)
-st.markdown('<p class="main-subtitle">智慧公平排班平台 ｜ v5.3 終極無瑕版</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-subtitle">智慧公平排班平台 ｜ v5.4 智能示範版</p>', unsafe_allow_html=True)
 
 col_btn1, col_btn2 = st.columns(2)
 with col_btn1:
