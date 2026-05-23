@@ -170,7 +170,7 @@ def generate_roster(students_df, leave_students, seed):
 with st.sidebar:
     st.header("🗄️ 跨週數據備份區")
     
-    # 【新增功能】一鍵載入高畫質行政示範數據
+    # 💡 一鍵載入行政示範數據
     if st.button("💡 一鍵載入行政示範數據", type="secondary"):
         demo_prefects = [
             {"name": "Alice Chan", "form": "F.5", "class": "5A", "role": "Assistant Head Study Prefect", "available": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY", "history_duties": 5, "history_weight": 5.0, "remarks": "隊長/經驗豐富"},
@@ -239,7 +239,7 @@ with st.sidebar:
 # 6. 主畫面：排班操作與防護網
 # ==========================================
 st.markdown('<p class="main-title">🦅 SYSS STUDY PREFECT ROSTER</p>', unsafe_allow_html=True)
-st.markdown('<p class="main-subtitle">智慧公平排班平台 ｜ v5.4 智能示範版</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-subtitle">智慧公平排班平台 ｜ v5.5 終極旗艦版</p>', unsafe_allow_html=True)
 
 col_btn1, col_btn2 = st.columns(2)
 with col_btn1:
@@ -385,7 +385,8 @@ if not master_report_df.empty:
     st.write("---")
     c_out1, c_out2 = st.columns([7, 3])
     with c_out1:
-        st.plotly_chart(px.bar(master_report_df, x='學生姓名 (Prefect Name)', y='最終總計加權負荷 (點)', text_auto='.2f', title="全體累積工作點數監控", color='最終總計加權負荷 (點)', color_continuous_scale='gold'), use_container_width=True)
+        # 🟢 已修復 ValueError: 漸層色板替換為合法的 'YlOrBr'
+        st.plotly_chart(px.bar(master_report_df, x='學生姓名 (Prefect Name)', y='最終總計加權負荷 (點)', text_auto='.2f', title="全體累積工作點數監控", color='最終總計加權負荷 (點)', color_continuous_scale='YlOrBr'), use_container_width=True)
     with c_out2:
         st.markdown("<br><br>", unsafe_allow_html=True)
         if not typo_detected:
