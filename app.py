@@ -63,7 +63,7 @@ if 'show_clear_confirm' not in st.session_state:
     st.session_state.show_clear_confirm = False
 
 # ==========================================
-# 4. 高階排班演算法 (積分制 + 老帶新 + 全天請假排除)
+# 4. 高階排班演算法 (優化核心開房規則)
 # ==========================================
 def generate_roster(students_df, leave_students, seed):
     if students_df.empty:
@@ -71,9 +71,16 @@ def generate_roster(students_df, leave_students, seed):
         return create_blank_roster()
 
     random.seed(seed)
-    new_roster = create_blank_roster()
-    students = students_df.to_dict('records')
     
+    # 初始化新課表，並智慧保留使用者先前手動在表格填寫的 "X" (特殊不開放日)
+    new_roster = create_blank_roster()
+    for r in ROWS_ROSTER:
+        for d in DAYS:
+            if r in st.session_state.roster_df.index and d in st.session_state.roster_df.columns:
+                if str(st.session_state.roster_df.at[r, d]).strip().upper() == "X":
+                    new_roster.at[r, d] = "X"
+
+    students = students_df.to_dict('records')
     current_week_weights = {str(s['name']).strip(): 0.0 for s in students if str(s.get('name')).strip()}
     base_historical_weights = {}
     student_form_map = {}
@@ -98,12 +105,16 @@ def generate_roster(students_df, leave_students, seed):
         today_roles.sort(key=lambda x: 1 if "- 2" in x else 0)
 
         for role in today_roles:
-            if 'Room202' in role and day in ['MONDAY', 'TUESDAY', 'THURSDAY', 'FRIDAY']:
-                new_roster.at[role, day] = "X"
+            # 💡 【優化】尊重使用者手動標記的特殊不開放日
+            if new_roster.at[role, day] == "X":
                 continue
-            if ('Room302' in role or 'Room303' in role) and day in ['MONDAY', 'THURSDAY', 'FRIDAY']:
-                new_roster.at[role, day] = "X"
+
+            # 💡 【修正】Room 202 星期二、五為常規不開放 -> 直接留空白並跳過派人
+            if 'Room202' in role and day in ['TUESDAY', 'FRIDAY']:
+                new_roster.at[role, day] = ""
                 continue
+                
+            # 💡 【修正】拔除先前 Room 302 / 303 在一、四、五錯誤塗上 "X" 的程式碼
 
             candidates = []
             partner_is_junior = False
@@ -159,8 +170,7 @@ def generate_roster(students_df, leave_students, seed):
                 current_week_weights[chosen_name] += chosen_w
                 last_duty_day[chosen_name] = d_idx
             else:
-                if new_roster.at[role, day] != "X":
-                    new_roster.at[role, day] = ""
+                new_roster.at[role, day] = ""
 
     return new_roster
 
@@ -170,7 +180,6 @@ def generate_roster(students_df, leave_students, seed):
 with st.sidebar:
     st.header("🗄️ 跨週數據備份區")
     
-    # 💡 一鍵載入行政示範數據
     if st.button("💡 一鍵載入行政示範數據", type="secondary"):
         demo_prefects = [
             {"name": "Alice Chan", "form": "F.5", "class": "5A", "role": "Assistant Head Study Prefect", "available": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY", "history_duties": 5, "history_weight": 5.0, "remarks": "隊長/經驗豐富"},
@@ -239,7 +248,7 @@ with st.sidebar:
 # 6. 主畫面：排班操作與防護網
 # ==========================================
 st.markdown('<p class="main-title">🦅 SYSS STUDY PREFECT ROSTER</p>', unsafe_allow_html=True)
-st.markdown('<p class="main-subtitle">智慧公平排班平台 ｜ v5.5 終極旗艦版</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-subtitle">智慧公平排班平台 ｜ v5.6 核心規則修正版</p>', unsafe_allow_html=True)
 
 col_btn1, col_btn2 = st.columns(2)
 with col_btn1:
@@ -307,16 +316,16 @@ for d in DAYS:
             typo_detected = True
             invalid_entries.append(f"【{d} - {r}】: {val}")
         
-        is_closed = (('Room202' in r and d in ['MONDAY', 'TUESDAY', 'THURSDAY', 'FRIDAY']) or 
-                     (('Room302' in r or 'Room303' in r) and d in ['MONDAY', 'THURSDAY', 'FRIDAY']))
-        if val == "" and not is_closed:
+        # 💡 【修正】Room 202 在週二、週五是常規不開放，所以為空值是完全正常的，排除在警告之外
+        is_regularly_closed = ('Room202' in r and d in ['TUESDAY', 'FRIDAY'])
+        if val == "" and not is_regularly_closed:
             vacuum_detected = True
             vacuum_entries.append(f"【{d} - {r}】")
 
 if typo_detected:
     st.markdown('<div class="danger-alert"><b>⚠️ 偵測到無效姓名，請核對左側名冊：</b><br>' + '<br>'.join(invalid_entries) + '</div>', unsafe_allow_html=True)
 elif vacuum_detected:
-    st.markdown('<div class="warning-alert"><b>💡 提示：存在空白崗位：</b><br>' + '<br>'.join(vacuum_entries) + '</div>', unsafe_allow_html=True)
+    st.markdown('<div class="warning-alert"><b>💡 提示：存在未排班的開門空缺（若為手動標記特休 X 則免理會）：</b><br>' + '<br>'.join(vacuum_entries) + '</div>', unsafe_allow_html=True)
 
 # ==========================================
 # 9. 高效流線化統計計算
@@ -385,7 +394,6 @@ if not master_report_df.empty:
     st.write("---")
     c_out1, c_out2 = st.columns([7, 3])
     with c_out1:
-        # 🟢 已修復 ValueError: 漸層色板替換為合法的 'YlOrBr'
         st.plotly_chart(px.bar(master_report_df, x='學生姓名 (Prefect Name)', y='最終總計加權負荷 (點)', text_auto='.2f', title="全體累積工作點數監控", color='最終總計加權負荷 (點)', color_continuous_scale='YlOrBr'), use_container_width=True)
     with c_out2:
         st.markdown("<br><br>", unsafe_allow_html=True)
