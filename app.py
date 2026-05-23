@@ -287,7 +287,7 @@ with st.sidebar:
 head_col1, head_col2 = st.columns([3, 1])
 with head_col1:
     st.title("📅 Study Prefect Duty Roster")
-    st.caption("📱 Mobile-first 手機友好版 | 點擊左側功能選單可以隨時管理名單")
+    st.caption("點擊左側功能選單可以隨時管理名單")
 
 with head_col2:
     if not st.session_state.students_df.empty:
