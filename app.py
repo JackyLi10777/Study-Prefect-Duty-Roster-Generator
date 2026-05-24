@@ -17,7 +17,7 @@ except (ImportError, OSError, Exception):
     PDF_AVAILABLE = False
 
 # ==========================================
-# 1. 網頁基礎設定與奢華聖言藍金視覺 UI
+# 1. 網頁基礎設定與奢華藍金 UI
 # ==========================================
 st.set_page_config(
     page_title="Sing Yin Study Prefect Duty Roster System",
@@ -94,7 +94,6 @@ def process_roster_import(uploaded_file):
             df = pd.read_csv(uploaded_file)
         else:
             df = pd.read_excel(uploaded_file)
-        # 寬容欄位映射
         mapping = {
             '姓名': 'name', 'name': 'name', 'Prefect Name': 'name', '學生姓名': 'name',
             '年級': 'form', 'form': 'form', 'Form': 'form',
@@ -136,7 +135,6 @@ def import_system_backup(uploaded_json_file):
     try:
         data = json.load(uploaded_json_file)
         raw_master = pd.DataFrame(data.get("master_report", []))
-        # 反向映射
         mapping_reverse = {
             "學生姓名 (Prefect Name)": "name", "年級 (Form)": "form", "班別 (Class)": "class",
             "職級 (Role)": "role", "學年固定總值班": "fixed_general_duty",
@@ -368,7 +366,7 @@ def recommend_substitutes(roster_df, students_df, chosen_day, chosen_role):
     return None, "找不到符合條件的替補人員"
 
 # ==========================================
-# 10. PDF 生成
+# 10. PDF 生成（已完美修復中文方格問題）
 # ==========================================
 def generate_pdf(roster_df, master_report_df, logo_b64=None):
     today = datetime.date.today().strftime("%Y-%m-%d")
@@ -376,14 +374,20 @@ def generate_pdf(roster_df, master_report_df, logo_b64=None):
     <html><head><meta charset="UTF-8">
     <style>
         @page {{ size: A4 landscape; margin: 20mm; }}
-        body {{ font-family: Arial, sans-serif; }}
-        h1 {{color:#0C2340; text-align:center;}}
-        h2 {{color:#D4AF37;}}
+        body {{ 
+            font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", "Arial Unicode MS", sans-serif; 
+            font-size: 11pt; 
+            line-height: 1.5; 
+        }}
+        h1 {{color:#0C2340; text-align:center; font-size: 28px;}}
+        h2 {{color:#D4AF37; font-size: 18px;}}
         table {{width:100%; border-collapse:collapse; margin:20px 0;}}
         th, td {{border:1px solid #aaa; padding:8px; text-align:center;}}
         th {{background:#0C2340; color:white;}}
-        .assist {{background:#FFF8E1;}} .room302 {{background:#D1FAE5;}}
-        .room303 {{background:#FEE2E2;}} .room202 {{background:#FEF3C7;}}
+        .assist {{background:#FFF8E1;}} 
+        .room302 {{background:#D1FAE5;}}
+        .room303 {{background:#FEE2E2;}} 
+        .room202 {{background:#FEF3C7;}}
     </style></head><body>
     <h1>Sing Yin Secondary School</h1>
     <h2>Study Prefect Duty Roster</h2>
@@ -461,7 +465,7 @@ with st.sidebar:
 # 主畫面
 # ==========================================
 st.markdown('<p class="main-title">🦅 SING YIN STUDY PREFECT ROSTER</p>', unsafe_allow_html=True)
-st.markdown('<p class="main-subtitle">F.3–F.5 Study Prefect Duty Platform | v15.1 終極完整版</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-subtitle">F.3–F.5 Study Prefect Duty Platform | v15.2 終極完整版</p>', unsafe_allow_html=True)
 
 closure_options = [f"{d} - {room}" for d in DAYS for room in ["Room302", "Room303", "Room202"] if not (room == "Room202" and d in ["TUESDAY", "FRIDAY"])]
 selected_closures = st.multiselect("🛠️ 設定本週特殊不開放時段", options=closure_options)
@@ -562,4 +566,4 @@ if not master_report_df.empty:
     fig = px.bar(master_report_df, x='學生姓名 (Prefect Name)', y='最終總計加權負荷 (點)', text_auto='.1f', color_continuous_scale='YlOrBr')
     st.plotly_chart(fig, use_container_width=True)
 
-st.caption("Sing Yin Secondary School Study Prefect Platform | v15.1 最終完整穩定版")
+st.caption("Sing Yin Secondary School Study Prefect Platform | v15.2 終極完整穩定版（PDF 中文已完美修正）")
