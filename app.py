@@ -182,7 +182,7 @@ def import_system_backup(uploaded_json_file):
         st.sidebar.error(f"❌ 備份還原失敗，格式錯誤: {str(e)}")
 
 # ==========================================
-# 6. 核心排班演算法（完整不省略）
+# 6. 核心排班演算法（已修正縮排）
 # ==========================================
 def generate_roster(students_df: pd.DataFrame, leave_students: list, special_closures: list, seed: int) -> pd.DataFrame:
     if students_df.empty or students_df['name'].str.strip().eq('').all():
@@ -296,7 +296,11 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
                 new_roster.at[role, day] = chosen_name
                 assigned_today.add(chosen_name)
                 current_week_weights[chosen_name] += chosen[2]
-                # ==========================================
+                last_duty_day[chosen_name] = d_idx   # ← 已修正縮排
+
+    return new_roster
+
+# ==========================================
 # 7. 全局數據審計與雙軌統計大表計算中心
 # ==========================================
 def validate_and_compute(roster_df: pd.DataFrame, students_df: pd.DataFrame, leave_students: list):
@@ -452,8 +456,6 @@ def generate_pdf(roster_df, master_report_df, logo_b64=None):
         th {{ background-color: #0C2340; color: white; font-weight: bold; font-size: 10px; }}
         td {{ font-weight: bold; color: #1F2937; }}
         tr:nth-child(even) td {{ background-color: #F9FAFB; }}
-        .assist {{background:#FFF8E1;}} .room302 {{background:#D1FAE5;}} 
-        .room303 {{background:#FEE2E2;}} .room202 {{background:#DBEAFE;}}
     </style></head><body>
     <div class="header-container">
     """
@@ -559,7 +561,7 @@ with st.sidebar:
 # 11. 主畫面大數據控制中心
 # ==========================================
 st.markdown('<p class="main-title">🦅 SING YIN STUDY PREFECT ROSTER</p>', unsafe_allow_html=True)
-st.markdown('<p class="main-subtitle">F.3–F.5 Study Prefect Smart Scheduling Platform | v15.0 最終完整穩定版</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-subtitle">F.3–F.5 Study Prefect Smart Scheduling Platform | v15.1 最終完整穩定版</p>', unsafe_allow_html=True)
 
 closure_options = [f"{d} - {room}" for d in DAYS for room in ["Room302", "Room303", "Room202"] if not (room == "Room202" and d in ["TUESDAY", "FRIDAY"])]
 selected_closures = st.multiselect("🛠️ 設定本週「特殊不開放」時段（或直接在下方表格內打 X 鎖定）：", options=closure_options, key="special_closures")
@@ -646,7 +648,6 @@ def apply_cell_style(val, role, day):
 st.write("---")
 st.subheader("📅 本週班表狀態與動態調整通道")
 
-# 雙軌化 Tabs
 tab_view, tab_edit = st.tabs(["📅 奢華藍金值班表 (視覺公告版)", "✏️ 互動式手動修改 (動態校準版)"])
 
 with tab_view:
@@ -755,7 +756,4 @@ if st.button("🔮 執行篩選並推薦最優替補人員", type="secondary", u
     else:
         st.warning(error_msg)
 
-st.caption("Sing Yin Secondary School Study Prefect Platform | v15.0 最終完整穩定版")
-                last_duty_day[chosen_name] = d_idx
-
-    return new_roster
+st.caption("Sing Yin Secondary School Study Prefect Platform | v15.1 最終完整穩定版")
