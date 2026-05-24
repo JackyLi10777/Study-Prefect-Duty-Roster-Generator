@@ -8,12 +8,13 @@ import datetime
 import io
 import json
 
-# 匯入所有模組
+# 匯入所有模組（包含全新 AI 解析模組）
 from config import DAYS, ROWS_ROSTER, WEIGHTS, DAILY_VERSES, VERSION, APP_TITLE
 from utils import generate_pdf, export_system_backup, import_system_backup, process_roster_import, get_daily_verse
 from core import generate_roster, validate_and_compute, recommend_substitutes
 from data import get_demo_dataframe, get_sample_format_dataframe
 from ui_components import render_sidebar, render_main_header, render_control_buttons, show_daily_verse
+from ai_parser import ai_parse_remarks
 
 # ==========================================
 # Session State 初始化
@@ -37,7 +38,7 @@ if 'leave_tracker_input' not in st.session_state:
 # 主程式入口
 # ==========================================
 def main():
-    # 渲染側邊欄
+    # 渲染側邊欄（已包含 AI 智能解析按鈕）
     render_sidebar()
 
     # 渲染主畫面標題與每日金句
@@ -106,9 +107,9 @@ def main():
             st.session_state.roster_df,
             use_container_width=True,
             key="main_roster_editor_widget",
-            on_change=sync_roster_data
+            on_change=lambda: setattr(st.session_state, 'roster_df', edited_roster_df) if 'edited_roster_df' in locals() else None
         )
-        if not edited_roster_df.equals(st.session_state.roster_df):
+        if 'edited_roster_df' in locals() and not edited_roster_df.equals(st.session_state.roster_df):
             st.session_state.roster_df = edited_roster_df
             st.rerun()
 
