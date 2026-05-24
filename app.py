@@ -8,7 +8,7 @@ import datetime
 import json
 
 # ==========================================
-# 0. PDF 支援
+# 0. PDF 支援（Streamlit Cloud 相容）
 # ==========================================
 try:
     from weasyprint import HTML
@@ -17,7 +17,7 @@ except (ImportError, OSError, Exception):
     PDF_AVAILABLE = False
 
 # ==========================================
-# 1. 網頁設定
+# 1. 網頁設定與藍金 UI
 # ==========================================
 st.set_page_config(
     page_title="Sing Yin Study Prefect Duty Roster System",
@@ -32,7 +32,7 @@ st.markdown("""
     .main-title { color: #0C2340; font-size: 36px; font-weight: bold; letter-spacing: 2px; margin-bottom: 5px; }
     .main-subtitle { color: #D4AF37; font-size: 16px; font-weight: 600; margin-bottom: 25px; }
     .stDataFrame, [data-testid="stDataEditor"] { border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.05); }
-    .stButton > button { height: 3.2rem; font-weight: bold; border-radius: 10px; width: 100%; }
+    .stButton > button { height: 3.2rem; font-weight: bold; border-radius: 10px; width: 100%; transition: all 0.3s; }
     .danger-alert { background-color: #FEF2F2; border-left: 5px solid #EF4444; padding: 15px; border-radius: 8px; color: #991B1B; }
     .warning-alert { background-color: #FFFBEB; border-left: 5px solid #F59E0B; padding: 15px; border-radius: 8px; color: #92400E; }
     footer {visibility: hidden;}
@@ -61,9 +61,9 @@ WEIGHTS = {
 }
 
 # ==========================================
-# 3. Session State
+# 3. Session State 初始化（防 KeyError）
 # ==========================================
-if 'students_df' not in st.session_state:
+if 'students_df' not in st.session_state or st.session_state.students_df is None:
     st.session_state.students_df = pd.DataFrame(columns=["name", "form", "class", "role", "fixed_general_duty", "available", "history_duties", "history_weight", "remarks"])
 if 'roster_df' not in st.session_state:
     st.session_state.roster_df = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
@@ -75,7 +75,7 @@ if 'leave_tracker_input' not in st.session_state:
     st.session_state.leave_tracker_input = []
 
 # ==========================================
-# 4. 完整 generate_roster
+# 4. 完整 generate_roster（不省略）
 # ==========================================
 def generate_roster(students_df: pd.DataFrame, leave_students: list, special_closures: list, seed: int) -> pd.DataFrame:
     if students_df.empty or students_df['name'].str.strip().eq('').all():
@@ -242,7 +242,7 @@ def validate_and_compute(roster_df: pd.DataFrame, students_df: pd.DataFrame, lea
     return typo_detected, vacuum_detected, invalid_entries, vacuum_entries, pd.DataFrame(final_records)
 
 # ==========================================
-# 6. 完整智慧替補推薦
+# 6. 智慧替補推薦
 # ==========================================
 def recommend_substitutes(roster_df, students_df, chosen_day, chosen_role):
     current_person = str(roster_df.at[chosen_role, chosen_day]).strip()
@@ -310,7 +310,7 @@ def generate_pdf(roster_df, master_report_df, logo_b64=None):
     return HTML(string=html).write_pdf()
 
 # ==========================================
-# 8. 備份 / 還原系統（解決 Cloud 重置問題）
+# 8. 備份 / 還原系統
 # ==========================================
 def export_system_backup():
     backup_data = {
@@ -344,20 +344,42 @@ with st.sidebar:
     st.write("---")
     st.header("🗄️ 數據導入")
     if st.button("💡 一鍵載入 Sing Yin 示範數據"):
-        demo_data = [ ... ]  # 使用您之前提供的示範數據
+        demo_data = [
+            {"name": "陳卓軒", "form": "F.5", "class": "5A", "role": "Assistant Head Study Prefect", "fixed_general_duty": "MONDAY", "available": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY", "history_duties": 12, "history_weight": 12.0, "remarks": "隊長"},
+            {"name": "李浩然", "form": "F.5", "class": "5B", "role": "Assistant Head Study Prefect", "fixed_general_duty": "WEDNESDAY", "available": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY", "history_duties": 10, "history_weight": 10.0, "remarks": ""},
+            {"name": "張凱傑", "form": "F.4", "class": "4A", "role": "Study Prefect", "fixed_general_duty": "NONE", "available": "MONDAY,WEDNESDAY,THURSDAY,FRIDAY", "history_duties": 9, "history_weight": 13.5, "remarks": ""},
+            {"name": "黃子軒", "form": "F.4", "class": "4B", "role": "Study Prefect", "fixed_general_duty": "NONE", "available": "TUESDAY,WEDNESDAY,FRIDAY", "history_duties": 8, "history_weight": 12.0, "remarks": ""},
+            {"name": "林俊傑", "form": "F.3", "class": "3A", "role": "Study Prefect", "fixed_general_duty": "NONE", "available": "MONDAY,TUESDAY,THURSDAY", "history_duties": 6, "history_weight": 9.0, "remarks": "需老帶新"},
+            {"name": "王偉倫", "form": "F.5", "class": "5C", "role": "Study Prefect", "fixed_general_duty": "NONE", "available": "MONDAY,WEDNESDAY,FRIDAY", "history_duties": 7, "history_weight": 10.5, "remarks": ""},
+            {"name": "劉家豪", "form": "F.4", "class": "4C", "role": "Study Prefect", "fixed_general_duty": "NONE", "available": "TUESDAY,THURSDAY", "history_duties": 5, "history_weight": 7.5, "remarks": ""},
+        ]
         st.session_state.students_df = pd.DataFrame(demo_data)
-        st.success("✅ 示範數據已載入")
+        st.success("✅ Sing Yin 示範數據已載入")
         st.rerun()
 
     st.write("---")
     st.header("👥 在線名冊編輯")
-    edited_df = st.data_editor(st.session_state.students_df, num_rows="dynamic", use_container_width=True, hide_index=True)
+    edited_df = st.data_editor(
+        st.session_state.students_df,
+        column_config={
+            "name": st.column_config.TextColumn("姓名 *", required=True),
+            "form": st.column_config.SelectboxColumn("年級", options=["F.3", "F.4", "F.5"]),
+            "role": st.column_config.SelectboxColumn("職級", options=["Study Prefect", "Assistant Head Study Prefect"]),
+            "available": st.column_config.TextColumn("可用日子", default="MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY"),
+            "history_duties": st.column_config.NumberColumn("歷史累計(次)", disabled=True),
+            "history_weight": st.column_config.NumberColumn("歷史累計(點)", disabled=True),
+        },
+        num_rows="dynamic", use_container_width=True, hide_index=True
+    )
     st.session_state.students_df = edited_df
 
     st.write("---")
     st.header("🛑 突發請假名單")
-    valid_names = [str(name).strip() for name in st.session_state.students_df["name"].dropna() if str(name).strip()]
-    leave_students = st.multiselect("全天請假同學", options=valid_names, default=st.session_state.leave_tracker_input)
+    valid_names_list = []
+    if not st.session_state.students_df.empty and "name" in st.session_state.students_df.columns:
+        valid_names_list = [str(name).strip() for name in st.session_state.students_df["name"].dropna() if str(name).strip()]
+
+    leave_students = st.multiselect("全天請假同學", options=valid_names_list, default=st.session_state.leave_tracker_input)
 
     st.write("---")
     st.header("💾 Cloud 備份系統")
@@ -375,12 +397,94 @@ with st.sidebar:
         import_system_backup(uploaded_backup)
 
 # ==========================================
-# 主畫面（其餘部分與您最新版一致）
+# 主畫面
 # ==========================================
 st.markdown('<p class="main-title">🦅 SING YIN STUDY PREFECT ROSTER</p>', unsafe_allow_html=True)
-st.markdown('<p class="main-subtitle">F.3–F.5 Study Prefect Duty Platform | v9.1 最終版</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-subtitle">F.3–F.5 Study Prefect Duty Platform | v9.3 最終完整版</p>', unsafe_allow_html=True)
 
-# 後續的按鈕、Tabs、替補系統、圖表等請使用您之前提供的完整程式碼片段
-# （因篇幅限制，這裡省略重複部分，請將您上一個版本的主畫面部分直接貼上）
+closure_options = [f"{d} - {room}" for d in DAYS for room in ["Room302", "Room303", "Room202"] if not (room == "Room202" and d in ["TUESDAY", "FRIDAY"])]
+selected_closures = st.multiselect("🛠️ 設定本週特殊不開放時段", options=closure_options)
 
-st.caption("Sing Yin Secondary School Study Prefect Platform | v9.1 最終穩定版")
+col1, col2, col3 = st.columns([2, 1.5, 1.5])
+with col1:
+    if st.button("🚀 生成本週全新值班表", type="primary", use_container_width=True):
+        with st.spinner("智慧排班計算中..."):
+            seed = random.randint(10000, 99999)
+            st.session_state.roster_df = generate_roster(st.session_state.students_df, leave_students, selected_closures, seed)
+            st.success(f"✅ 排班完成！種子碼: {seed}")
+
+with col2:
+    if st.button("🗑️ 一鍵清空本週排班", type="secondary", use_container_width=True):
+        st.session_state.show_clear_confirm = True
+
+if st.session_state.show_clear_confirm:
+    st.markdown('<div class="warning-alert"><b>⚠️ 確定要清除全部排班？此操作無法復原！</b></div>', unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    if c1.button("確定清空", type="primary"):
+        st.session_state.roster_df = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
+        st.session_state.show_clear_confirm = False
+        st.rerun()
+    if c2.button("取消"):
+        st.session_state.show_clear_confirm = False
+        st.rerun()
+
+with col3:
+    if st.button("📄 匯出 PDF 列印版", type="primary", use_container_width=True):
+        typo, _, _, _, master_df = validate_and_compute(st.session_state.roster_df, st.session_state.students_df, leave_students)
+        if typo:
+            st.error("請先修正姓名錯誤")
+        elif PDF_AVAILABLE:
+            logo_b64 = base64.b64encode(st.session_state.logo_data).decode() if st.session_state.logo_data else None
+            pdf_bytes = generate_pdf(st.session_state.roster_df, master_df, logo_b64)
+            st.download_button("💾 下載 PDF", pdf_bytes, f"SYSS_Roster_{datetime.date.today()}.pdf", "application/pdf", use_container_width=True)
+        else:
+            st.info("💡 PDF 功能需 weasyprint 支援")
+
+# ==========================================
+# Tabs、驗證、替補系統
+# ==========================================
+typo_detected, vacuum_detected, invalid_entries, vacuum_entries, master_report_df = validate_and_compute(
+    st.session_state.roster_df, st.session_state.students_df, leave_students
+)
+
+if typo_detected:
+    st.markdown(f'<div class="danger-alert"><b>⚠️ 偵測到無效姓名：</b><br>' + '<br>'.join(invalid_entries) + '</div>', unsafe_allow_html=True)
+elif vacuum_detected:
+    st.markdown(f'<div class="warning-alert"><b>💡 存在未排班的開放時段：</b><br>' + '<br>'.join(vacuum_entries) + '</div>', unsafe_allow_html=True)
+
+tab_edit, tab_view = st.tabs(["✏️ 互動微調模式", "🎨 彩色列印預覽"])
+with tab_edit:
+    updated_df = st.data_editor(st.session_state.roster_df, use_container_width=True, height=320)
+    st.session_state.roster_df = updated_df
+with tab_view:
+    styled = st.session_state.roster_df.style.apply(lambda col: ["color: #EF4444; font-weight: bold;" if v == "X" else "" for v in col], axis=0)
+    st.dataframe(styled, use_container_width=True, height=320)
+
+# 智慧替補
+st.write("---")
+st.subheader("🔄 突發請假？智慧替補推薦系統")
+c1, c2 = st.columns(2)
+with c1:
+    chosen_day = st.selectbox("請假日期", DAYS)
+with c2:
+    chosen_role = st.selectbox("請假崗位", ROWS_ROSTER)
+
+current_person = str(st.session_state.roster_df.at[chosen_role, chosen_day]).strip()
+st.text_input("目前該時段人員", value=current_person if current_person not in ["", "X"] else "（無人）", disabled=True)
+
+if st.button("🔍 尋找最優替補", type="primary"):
+    sub_df, msg = recommend_substitutes(st.session_state.roster_df, st.session_state.students_df, chosen_day, chosen_role)
+    if sub_df is not None:
+        st.success("📋 推薦替補名單（按總負荷由低到高排序）")
+        st.dataframe(sub_df, use_container_width=True, hide_index=True)
+    else:
+        st.warning(msg)
+
+# 公平性圖表
+if not master_report_df.empty:
+    st.write("---")
+    st.subheader("📊 全體工作量公平性監控")
+    fig = px.bar(master_report_df, x='學生姓名 (Prefect Name)', y='最終總計加權負荷 (點)', text_auto='.1f', color_continuous_scale='YlOrBr')
+    st.plotly_chart(fig, use_container_width=True)
+
+st.caption("Sing Yin Secondary School Study Prefect Platform | v9.3 最終完整穩定版")
