@@ -3,11 +3,11 @@ import streamlit as st
 import pandas as pd
 import datetime
 import io
+import random
 from config import DAYS, ROWS_ROSTER, DAILY_VERSES, VERSION, APP_TITLE
 from utils import process_roster_import, export_system_backup, import_system_backup
 from data import get_demo_dataframe, get_sample_format_dataframe
 from ai_parser import ai_parse_remarks
-from core import generate_roster   # 用於控制按鈕
 
 # ==========================================
 # 每日金句（主畫面使用）
@@ -23,20 +23,17 @@ def show_daily_verse():
     """, unsafe_allow_html=True)
 
 # ==========================================
-# 側邊欄 - 完整設定區（已補回備份導入）
+# 側邊欄 - 完整管理功能（未簡化）
 # ==========================================
 def render_sidebar():
     with st.sidebar:
         st.header("🏫 Sing Yin Secondary School")
         
-        # 校徽上傳
         uploaded_logo = st.file_uploader("上傳校徽 (PNG)", type=["png"])
         if uploaded_logo:
             st.session_state.logo_data = uploaded_logo.getvalue()
 
         st.write("---")
-        
-        # 即時統計
         st.subheader("📊 即時統計")
         if not st.session_state.students_df.empty:
             total = len(st.session_state.students_df)
@@ -68,12 +65,30 @@ def render_sidebar():
             process_roster_import(uploaded_roster)
 
         st.write("---")
+        st.subheader("👥 名冊即時修改")
+        st.caption("直接在此編輯所有資料")
+        st.session_state.students_df = st.data_editor(
+            st.session_state.students_df,
+            column_config={
+                "name": st.column_config.TextColumn("姓名 *", required=True),
+                "form": st.column_config.SelectboxColumn("年級", options=["F.3", "F.4", "F.5"]),
+                "role": st.column_config.SelectboxColumn("職級", options=["Study Prefect", "Assistant Head Study Prefect"]),
+                "fixed_general_duty": st.column_config.SelectboxColumn("固定總值班", options=["NONE", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]),
+                "available": st.column_config.TextColumn("可用日子"),
+                "history_duties": st.column_config.NumberColumn("歷史累計(次)"),
+                "history_weight": st.column_config.NumberColumn("歷史累計(點)"),
+                "remarks": st.column_config.TextColumn("備註")
+            },
+            num_rows="dynamic", use_container_width=True, hide_index=True, key="student_editor_widget"
+        )
+
+        st.write("---")
         st.subheader("🤖 AI 智能解析")
         if st.button("🚀 執行 AI 解析 Remarks", use_container_width=True):
             with st.spinner("AI 解析中..."):
                 updated_df = ai_parse_remarks(st.session_state.students_df)
                 st.session_state.students_df = updated_df
-                st.success("✅ AI 已自動更新欄位")
+                st.success("✅ AI 已自動更新固定值班、可用日子、職級等欄位")
                 st.rerun()
 
         st.write("---")
@@ -85,30 +100,21 @@ def render_sidebar():
         st.subheader("💾 Cloud 備份系統")
         st.caption("解決 Streamlit Cloud 休眠重置問題")
 
-        # 導出備份
         if st.button("⬇️ 導出完整備份 (JSON)", use_container_width=True):
             backup_json = export_system_backup(st.session_state.get("master_report_df", pd.DataFrame()))
-            st.download_button(
-                label="✅ 下載備份檔",
-                data=backup_json,
-                file_name=f"SYSS_Backup_{datetime.date.today().strftime('%Y%m%d')}.json",
-                mime="application/json",
-                use_container_width=True
-            )
+            st.download_button("✅ 下載備份檔", backup_json, f"SYSS_Backup_{datetime.date.today().strftime('%Y%m%d')}.json", "application/json", use_container_width=True)
 
-        # 導入備份（這就是您要找的按鈕）
         uploaded_backup = st.file_uploader("上傳備份 JSON 還原", type=["json"], key="backup_importer")
         if uploaded_backup and st.button("🔄 還原備份", use_container_width=True):
             import_system_backup(uploaded_backup)
 
-        st.caption("💡 建議每次生成班表後立即備份")
+        st.caption("💡 每次生成班表後建議立即備份")
 
 # ==========================================
 # 主畫面控制按鈕（生成排班）
 # ==========================================
 def render_control_buttons():
-    closure_options = [f"{d} - {room}" for d in DAYS for room in ["Room302", "Room303", "Room202"] 
-                       if not (room == "Room202" and d in ["TUESDAY", "FRIDAY"])]
+    closure_options = [f"{d} - {room}" for d in DAYS for room in ["Room302", "Room303", "Room202"] if not (room == "Room202" and d in ["TUESDAY", "FRIDAY"])]
     selected_closures = st.multiselect("🛠️ 本週特殊不開放時段", options=closure_options, key="special_closures")
 
     if st.button("🚀 智能計算：生成本週全新公平值班表", type="primary", use_container_width=True):
