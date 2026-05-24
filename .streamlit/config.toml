@@ -1,0 +1,34 @@
+# ==========================================
+# .streamlit/config.toml
+# Sing Yin Study Prefect Duty Roster 專用配置
+# 版本：v1.3 模組化 + AI 智能解析版
+# ==========================================
+
+[server]
+headless = true
+port = 8501
+address = "0.0.0.0"
+enableCORS = false
+enableXsrfProtection = false
+maxUploadSize = 50
+maxMessageSize = 500
+
+[theme]
+primaryColor = "#0C2340"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F8F1E3"
+textColor = "#1F2937"
+base = "light"
+font = "sans-serif"
+
+[ui]
+hideSidebarNav = false
+hideTopBar = false
+hideGitHubButton = false
+
+[logger]
+level = "INFO"
+messageFormat = "%(asctime)s | %(levelname)s | %(message)s"
+
+[browser]
+gatherUsageStats = false
