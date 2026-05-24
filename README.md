@@ -78,7 +78,7 @@ text---
 
 ## 📬 技術支援
 
-- **開發者**：Grok（xAI）
+- **開發者**：LI CHuangjie, Jacky
 - **版本控制**：本專案已完全模組化，方便未來維護
 - **問題回報**：請在 GitHub Issues 提出
 
