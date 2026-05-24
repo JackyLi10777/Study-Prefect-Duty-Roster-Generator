@@ -17,7 +17,7 @@ except (ImportError, OSError, Exception):
     PDF_AVAILABLE = False
 
 # ==========================================
-# 1. 網頁基礎設定與奢華藍金 UI
+# 1. 網頁基礎設定與奢華聖言藍金視覺 UI
 # ==========================================
 st.set_page_config(
     page_title="Sing Yin Study Prefect Duty Roster System",
@@ -366,7 +366,7 @@ def recommend_substitutes(roster_df, students_df, chosen_day, chosen_role):
     return None, "找不到符合條件的替補人員"
 
 # ==========================================
-# 10. PDF 生成（已完美修復中文方格問題）
+# 10. PDF 生成（已針對中文亂碼做最佳化）
 # ==========================================
 def generate_pdf(roster_df, master_report_df, logo_b64=None):
     today = datetime.date.today().strftime("%Y-%m-%d")
@@ -566,4 +566,4 @@ if not master_report_df.empty:
     fig = px.bar(master_report_df, x='學生姓名 (Prefect Name)', y='最終總計加權負荷 (點)', text_auto='.1f', color_continuous_scale='YlOrBr')
     st.plotly_chart(fig, use_container_width=True)
 
-st.caption("Sing Yin Secondary School Study Prefect Platform | v15.2 終極完整穩定版（PDF 中文已完美修正）")
+st.caption("Sing Yin Secondary School Study Prefect Platform | v15.2 終極完整穩定版")
