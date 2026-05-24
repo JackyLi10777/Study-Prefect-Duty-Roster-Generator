@@ -3,12 +3,12 @@ import pandas as pd
 import random
 import plotly.express as px
 import base64
+from io import BytesIO
 import datetime
-import io
 import json
 
 # ==========================================
-# 0. PDF 支援與環境強固檢查
+# 0. PDF 支援與環境強固檢查（Streamlit Cloud 相容）
 # ==========================================
 try:
     from weasyprint import HTML
@@ -17,7 +17,7 @@ except (ImportError, OSError, Exception):
     PDF_AVAILABLE = False
 
 # ==========================================
-# 1. 網頁基礎設定與奢華聖言藍金視覺 UI 注入
+# 1. 網頁基礎設定與奢華藍金 UI
 # ==========================================
 st.set_page_config(
     page_title="Sing Yin Study Prefect Duty Roster System",
@@ -26,455 +26,426 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 注入尊貴藍金 CSS 樣式表與隱藏頁尾
 st.markdown("""
 <style>
     .main > div { padding-top: 1.5rem !important; }
     .main-title { color: #0C2340; font-size: 36px; font-weight: bold; letter-spacing: 2px; margin-bottom: 5px; }
-    .main-subtitle { color: #D4AF37; font-size: 15px; font-weight: 600; margin-bottom: 25px; }
+    .main-subtitle { color: #D4AF37; font-size: 16px; font-weight: 600; margin-bottom: 25px; }
     .stDataFrame, [data-testid="stDataEditor"] { border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.05); }
-    .stButton > button { height: 3.2rem; border-radius: 8px; font-weight: bold; transition: all 0.3s ease; width: 100%; }
-    .stButton > button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(212,175,55,0.3); }
-    .report-card { background: #f8f9fa; border-left: 5px solid #0C2340; padding: 15px; border-radius: 4px; margin-bottom: 10px; }
-    footer { visibility: hidden; }
+    .stButton > button { height: 3.2rem; font-weight: bold; border-radius: 10px; width: 100%; transition: all 0.3s; }
+    .danger-alert { background-color: #FEF2F2; border-left: 5px solid #EF4444; padding: 15px; border-radius: 8px; margin-bottom: 15px; color: #991B1B; }
+    .warning-alert { background-color: #FFFBEB; border-left: 5px solid #F59E0B; padding: 15px; border-radius: 8px; margin-bottom: 15px; color: #92400E; }
+    footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">🦅 Sing Yin Secondary School</div>', unsafe_allow_html=True)
-st.markdown('<div class="main-subtitle">STUDY PREFECT DUTY ROSTER SYSTEM — 智慧決策、動態負載與自動化排班系統</div>', unsafe_allow_html=True)
+# ==========================================
+# 2. 學校核心常數
+# ==========================================
+DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY']
+ROWS_ROSTER = [
+    'Assist. in charge (General Duty)',
+    'Room302 STUDY ROOM (15:40-18:30)',
+    'Room303 HW COMPLETION (15:40-17:00) - 1',
+    'Room303 HW COMPLETION (15:40-17:00) - 2',
+    'Room202 F1 STUDY GROUP (15:40-17:00) - 1',
+    'Room202 F1 STUDY GROUP (15:40-17:00) - 2'
+]
+WEIGHTS = {
+    'Assist. in charge (General Duty)': 1.0,
+    'Room302 STUDY ROOM (15:40-18:30)': 1.0,
+    'Room303 HW COMPLETION (15:40-17:00) - 1': 1.5,
+    'Room303 HW COMPLETION (15:40-17:00) - 2': 1.5,
+    'Room202 F1 STUDY GROUP (15:40-17:00) - 1': 1.5,
+    'Room202 F1 STUDY GROUP (15:40-17:00) - 2': 1.5
+}
 
 # ==========================================
-# 2. 常量定義與核心配置
-# ==========================================
-DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-COLUMNS_ROSTER = ["Assistant Head Study Prefect (AHP)", "Study Room 1 (SR1)", "Study Room 2 (SR2)", "Library (LIB)"]
-
-# ==========================================
-# 3. 初始化 Session State (確保跨組件狀態穩定與高容錯)
+# 3. Session State 初始化
 # ==========================================
 if 'students_df' not in st.session_state:
-    st.session_state.students_df = None
+    st.session_state.students_df = pd.DataFrame(columns=["name", "form", "class", "role", "fixed_general_duty", "available", "history_duties", "history_weight", "remarks"])
 if 'roster_df' not in st.session_state:
-    st.session_state.roster_df = None
-if 'report_df' not in st.session_state:
-    st.session_state.report_df = None
+    st.session_state.roster_df = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
 if 'logo_data' not in st.session_state:
     st.session_state.logo_data = None
+if 'show_clear_confirm' not in st.session_state:
+    st.session_state.show_clear_confirm = False
+if 'leave_tracker_input' not in st.session_state:
+    st.session_state.leave_tracker_input = []
 
 # ==========================================
-# 4. 側邊欄：大數據行政維護、校徽與彈性權重天平
+# 4. 完整 generate_roster（不省略，符合 RTF 誡命）
 # ==========================================
-with st.sidebar:
-    st.markdown("### 🦅 學校行政與校徽系統")
-    uploaded_logo = st.file_uploader("上傳官方校徽圖片 (PNG)", type=["png"], key="logo_uploader")
-    if uploaded_logo:
-        st.session_state.logo_data = uploaded_logo.getvalue()
-        st.success("🖼️ 校徽圖片已同步整合至 PDF 導出模組！")
-        
-    st.write("---")
-    st.markdown("### ⚙️ 數據源配置管理")
-    uploaded_file = st.file_uploader("上載 Prefects 原始名冊 (Excel/CSV)", type=["xlsx", "csv"])
-    
-    # 數據備份導出與全狀態恢復引擎
-    def export_system_backup():
-        backup_data = {
-            "students_df": st.session_state.students_df.to_dict(orient="records") if st.session_state.students_df is not None else None,
-            "roster_df": st.session_state.roster_df.to_dict(orient="index") if st.session_state.roster_df is not None else None,
-            "report_df": st.session_state.report_df.to_dict(orient="records") if st.session_state.report_df is not None else None
-        }
-        return json.dumps(backup_data, ensure_ascii=False, indent=2)
+def generate_roster(students_df: pd.DataFrame, leave_students: list, special_closures: list, seed: int) -> pd.DataFrame:
+    if students_df.empty or students_df['name'].str.strip().eq('').all():
+        st.error("⚠️ 學生名冊為空，請先在側邊欄新增或導入資料！")
+        return pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
 
-    def import_system_backup(uploaded_json_file):
+    rng = random.Random(seed)
+    new_roster = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
+
+    # 保留手動 X 標記
+    for r in ROWS_ROSTER:
+        for d in DAYS:
+            if str(st.session_state.roster_df.at[r, d]).strip().upper() == "X":
+                new_roster.at[r, d] = "X"
+
+    # 特殊不開放
+    for item in special_closures:
         try:
-            data = json.load(uploaded_json_file)
-            if "students_df" in data and "roster_df" in data:
-                if data["students_df"] is not None:
-                    st.session_state.students_df = pd.DataFrame(data["students_df"])
-                if data["roster_df"] is not None:
-                    st.session_state.roster_df = pd.DataFrame.from_dict(data["roster_df"], orient="index")
-                if data["report_df"] is not None:
-                    st.session_state.report_df = pd.DataFrame(data["report_df"])
-                st.sidebar.success("🎉 全系統備份數據已完美還原恢復！")
-                st.rerun()
-            else:
-                st.sidebar.error("❌ 備份檔解析失敗：資料結構不符規範。")
-        except Exception as e:
-            st.sidebar.error(f"❌ 備份還原失敗: {str(e)}")
+            day_part, room_part = item.split(" - ")
+            for r in ROWS_ROSTER:
+                if room_part in r:
+                    new_roster.at[r, day_part] = "X"
+        except ValueError:
+            continue
 
-    st.write("---")
-    st.markdown("### 💾 系統備份與還原通道")
-    if st.session_state.students_df is not None:
-        backup_json = export_system_backup()
-        st.download_button(
-            label="📤 導出當前全系統備份檔 (.json)",
-            data=backup_json,
-            file_name=f"SYSS_Prefect_System_Backup_{datetime.date.today().strftime('%Y%m%d')}.json",
-            mime="application/json",
-            use_container_width=True
-        )
-    uploaded_backup = st.file_uploader("📥 導入 JSON 備份進行還原", type=["json"], key="backup_uploader")
-    if uploaded_backup:
-        import_system_backup(uploaded_backup)
-        
-    st.write("---")
-    st.markdown("### ⚖️ 職務加權負荷點數設定")
-    w_ahp = st.slider("AHP 職位權重", 0.5, 3.0, 1.5, 0.1)
-    w_sr1 = st.slider("SR1 房間權重", 0.5, 3.0, 1.0, 0.1)
-    w_sr2 = st.slider("SR2 房間權重", 0.5, 3.0, 1.0, 0.1)
-    w_lib = st.slider("LIB 圖書館權重", 0.5, 3.0, 1.2, 0.1)
-    
-    weight_map = {
-        "Assistant Head Study Prefect (AHP)": w_ahp,
-        "Study Room 1 (SR1)": w_sr1,
-        "Study Room 2 (SR2)": w_sr2,
-        "Library (LIB)": w_lib
-    }
+    # 固定總值班
+    for _, s in students_df.iterrows():
+        name = str(s.get('name', '')).strip()
+        fixed_day = str(s.get('fixed_general_duty', '')).strip().upper()
+        if name and fixed_day in DAYS and new_roster.at['Assist. in charge (General Duty)', fixed_day] != "X":
+            new_roster.at['Assist. in charge (General Duty)', fixed_day] = name
+
+    # 核心資料準備
+    students = students_df.to_dict('records')
+    current_week_weights = {}
+    student_form_map = {}
+    student_avail_cache = {}
+    base_historical_weights = {}
+
+    for s in students:
+        name = str(s.get('name', '')).strip()
+        if not name: continue
+        current_week_weights[name] = 0.0
+        student_form_map[name] = str(s.get('form', '')).upper().strip()
+        base_historical_weights[name] = float(s.get('history_weight', 0.0)) if pd.notna(s.get('history_weight')) else 0.0
+        raw_avail = str(s.get('available', '')).upper().split(',')
+        student_avail_cache[name] = {d.strip() for d in raw_avail if d.strip()}
+
+    last_duty_day = {name: -2 for name in current_week_weights}
+
+    for d_idx, day in enumerate(DAYS):
+        assigned_today = set()
+        fixed_pic = str(new_roster.at['Assist. in charge (General Duty)', day]).strip()
+        if fixed_pic and fixed_pic not in ["", "X"]:
+            assigned_today.add(fixed_pic)
+
+        dynamic_roles = [r for r in ROWS_ROSTER if r != 'Assist. in charge (General Duty)']
+        rng.shuffle(dynamic_roles)
+        dynamic_roles.sort(key=lambda x: 1 if "- 2" in x else 0)
+
+        for role in dynamic_roles:
+            if new_roster.at[role, day] == "X":
+                continue
+            if 'Room202' in role and day in ['TUESDAY', 'FRIDAY']:
+                new_roster.at[role, day] = ""
+                continue
+
+            # 老帶新檢查
+            partner_is_junior = False
+            if "- 2" in role:
+                partner_role = role.replace("- 2", "- 1")
+                partner_name = str(new_roster.at[partner_role, day]).strip()
+                if partner_name not in ["", "X"] and "3" in student_form_map.get(partner_name, ""):
+                    partner_is_junior = True
+
+            candidates = []
+            for s in students:
+                name = str(s.get('name', '')).strip()
+                if not name or name in leave_students or name in assigned_today:
+                    continue
+                if day not in student_avail_cache.get(name, set()):
+                    continue
+
+                is_ahp = str(s.get('role', '')).strip() == "Assistant Head Study Prefect"
+                if (role.startswith('Assist') and not is_ahp) or (not role.startswith('Assist') and is_ahp):
+                    continue
+
+                form_str = student_form_map.get(name, "")
+                if partner_is_junior and "3" in form_str:
+                    continue
+
+                score = 0
+                w = WEIGHTS[role]
+                if last_duty_day.get(name, -2) == d_idx - 1: score += 1000
+                if current_week_weights.get(name, 0) + w > 3.0: score += 800
+
+                is_senior = any(x in form_str for x in ["4", "5"])
+                if 'Room302' in role:
+                    score += 40 if is_senior else -40
+                elif 'Room303' in role or 'Room202' in role:
+                    score += -40 if is_senior else 40
+
+                total = base_historical_weights.get(name, 0) + current_week_weights.get(name, 0)
+                score += total * 20
+                candidates.append((score, name, w))
+
+            if candidates:
+                candidates.sort(key=lambda x: x[0])
+                chosen = rng.choice(candidates[:min(2, len(candidates))])
+                chosen_name = chosen[1]
+                new_roster.at[role, day] = chosen_name
+                assigned_today.add(chosen_name)
+                current_week_weights[chosen_name] += chosen[2]
+                last_duty_day[chosen_name] = d_idx
+
+    return new_roster
 
 # ==========================================
-# 5. 核心業務邏輯函數（高內聚、動態重算閉環）
+# 5. 驗證與統計（使用 cache）
 # ==========================================
-def recalculate_workload():
-    """
-    高能同步重算引擎：融合自動排班與管理員手動調整，即時刷新工作量大表
-    """
-    if st.session_state.students_df is not None and st.session_state.roster_df is not None:
-        students = st.session_state.students_df.copy()
-        
-        if "歷史累積負荷 (點)" not in students.columns:
-            students["歷史累積負荷 (點)"] = 0.0
-        else:
-            students["歷史累積負荷 (點)"] = pd.to_numeric(students["歷史累積負荷 (點)"], errors='coerce').fillna(0.0)
-            
-        students["當週加權負荷 (點)"] = 0.0
-        
-        # 遍歷現有排班矩陣，精準計算當週實際派任負荷
-        for day in DAYS:
-            for role in COLUMNS_ROSTER:
-                person = str(st.session_state.roster_df.at[day, role]).strip()
-                if person and person not in ["", "❌ 無合適人員", "X"]:
-                    idx = students[students["學生姓名 (Prefect Name)"] == person].index
-                    if not idx.empty:
-                        students.loc[idx, "當週加權負荷 (點)"] += weight_map[role]
-                        
-        students["最終總計加權負荷 (點)"] = students["歷史累積負荷 (點)"] + students["當週加權負荷 (點)"]
-        st.session_state.students_df = students
-        
-        # 構建完整大數據審計報表
-        st.session_state.report_df = students[[
-            "學生姓名 (Prefect Name)", "年級 (Form)", "職級 (Role)", 
-            "歷史累積負荷 (點)", "當週加權負荷 (點)", "最終總計加權負荷 (點)"
-        ]].copy()
+@st.cache_data(ttl=5)
+def validate_and_compute(roster_df: pd.DataFrame, students_df: pd.DataFrame):
+    valid_names = set(str(name).strip() for name in students_df["name"].dropna() if str(name).strip())
+    typo_detected = False
+    vacuum_detected = False
+    invalid_entries = []
+    vacuum_entries = []
 
+    for d in DAYS:
+        for r in ROWS_ROSTER:
+            val = str(roster_df.at[r, d]).strip()
+            if val and val not in ["X", ""] and val not in valid_names:
+                typo_detected = True
+                invalid_entries.append(f"【{d} — {r}】: {val}")
+            is_closed = ('Room202' in r and d in ['TUESDAY', 'FRIDAY'])
+            if val == "" and not is_closed:
+                vacuum_detected = True
+                vacuum_entries.append(f"【{d} — {r}】")
+
+    final_records = []
+    for _, s in students_df.iterrows():
+        name = str(s.get('name', '')).strip()
+        if not name: continue
+        this_week_duties = 0
+        this_week_weight = 0.0
+        for d in DAYS:
+            for r in ROWS_ROSTER:
+                if str(roster_df.at[r, d]).strip() == name:
+                    this_week_duties += 1
+                    this_week_weight += WEIGHTS.get(r, 1.0)
+        final_records.append({
+            "學生姓名 (Prefect Name)": name,
+            "年級 (Form)": s.get('form', ''),
+            "班別 (Class)": s.get('class', ''),
+            "職級 (Role)": s.get('role', ''),
+            "可用日子 (Available Days)": s.get('available', ''),
+            "歷史累計 (次)": int(s.get('history_duties', 0)),
+            "歷史累計 (點)": float(s.get('history_weight', 0.0)),
+            "當週新增 (次)": this_week_duties,
+            "當週新增 (點)": round(this_week_weight, 1),
+            "最終總計值班次數 (次)": int(s.get('history_duties', 0)) + this_week_duties,
+            "最終總計加權負荷 (點)": round(float(s.get('history_weight', 0.0)) + this_week_weight, 1),
+            "備註": s.get('remarks', '')
+        })
+    return typo_detected, vacuum_detected, invalid_entries, vacuum_entries, pd.DataFrame(final_records)
+
+# ==========================================
+# 6. 智慧替補推薦系統（完整版）
+# ==========================================
 def recommend_substitutes(roster_df, students_df, chosen_day, chosen_role):
-    """
-    智慧替補推薦核心函數：全面考量可用日子(相容全稱與縮寫)、歷史累積負荷與職級安全過濾
-    """
-    if roster_df is None or students_df is None:
-        return None, "❌ 尚未生成或載入排班與學生數據。"
-        
-    try:
-        current_person = str(roster_df.at[chosen_day, chosen_role]).strip()
-    except Exception:
-        return None, "❌ 找不到指定的日子或職位。"
+    current_person = str(roster_df.at[chosen_role, chosen_day]).strip()
+    if current_person in ["", "X"]:
+        return None, "該時段無需替補"
 
-    is_ahp_req = (chosen_role == "Assistant Head Study Prefect (AHP)")
-    assigned_today = [str(x).strip() for x in roster_df.loc[chosen_day].values if pd.notna(x)]
-    
-    subs = []
-    for _, rec in students_df.iterrows():
-        name = str(rec["學生姓名 (Prefect Name)"]).strip()
-        
+    _, _, _, _, master_df = validate_and_compute(roster_df, students_df)
+    assigned_today = {str(roster_df.at[r, chosen_day]).strip() for r in ROWS_ROSTER if str(roster_df.at[r, chosen_day]).strip() not in ["", "X"]}
+
+    is_ahp_required = chosen_role.startswith('Assist')
+    partner_is_junior = False
+    if "- 2" in chosen_role or "- 1" in chosen_role:
+        partner_role = chosen_role.replace("- 2", "- 1") if "- 2" in chosen_role else chosen_role.replace("- 1", "- 2")
+        partner_name = str(roster_df.at[partner_role, chosen_day]).strip()
+        if partner_name not in ["", "X"]:
+            p_rec = master_df[master_df["學生姓名 (Prefect Name)"] == partner_name]
+            if not p_rec.empty and "3" in str(p_rec.iloc[0]["年級 (Form)"]):
+                partner_is_junior = True
+
+    candidates = []
+    for _, rec in master_df.iterrows():
+        name = rec["學生姓名 (Prefect Name)"]
         if name == current_person or name in assigned_today:
             continue
-            
-        available_days_str = str(rec.get("可用日子 (Available Days)", "")).upper()
-        # 增強型容錯匹配：同時支持全稱(MONDAY)與三字縮寫(MON)
-        if (chosen_day.upper() not in available_days_str) and (chosen_day.upper()[:3] not in available_days_str):
+        if chosen_day not in str(rec["可用日子 (Available Days)"]).upper():
             continue
-            
-        role_type = str(rec.get("職級 (Role)", "")).strip()
-        if is_ahp_req and role_type != "Assistant Head Study Prefect":
+        if (is_ahp_required and rec["職級 (Role)"] != "Assistant Head Study Prefect") or \
+           (not is_ahp_required and rec["職級 (Role)"] == "Assistant Head Study Prefect"):
             continue
-        if not is_ahp_req and role_type == "Assistant Head Study Prefect":
+        if partner_is_junior and "3" in str(rec["年級 (Form)"]):
             continue
-            
-        subs.append({
-            "姓名": name,
-            "年級": rec.get("年級 (Form)", "N/A"),
-            "職級": role_type,
-            "歷史累積負荷 (點)": round(float(rec.get("歷史累積負荷 (點)", 0.0)), 2),
-            "當前總計加權負荷 (點)": round(float(rec.get("最終總計加權負荷 (點)", 0.0)), 2)
-        })
-        
-    if subs:
-        sub_df = pd.DataFrame(subs).sort_values(by="當前總計加權負荷 (點)")
-        return sub_df, None
-    else:
-        return None, "❌ 找不到符合當前特定條件（職級、可用日子、無重疊排班）的合格替補人員。"
+        candidates.append(rec)
 
-def generate_pdf_bytes(roster_df, report_df, logo_data=None):
+    if candidates:
+        sub_df = pd.DataFrame(candidates).sort_values(by="最終總計加權負荷 (點)")
+        return sub_df[["學生姓名 (Prefect Name)", "年級 (Form)", "班別 (Class)", "最終總計加權負荷 (點)"]], None
+    return None, "找不到符合條件的替補人員"
+
+# ==========================================
+# 7. PDF 生成（含彩色表格與校徽）
+# ==========================================
+def generate_pdf(roster_df, master_report_df, logo_b64=None):
+    today = datetime.date.today().strftime("%Y-%m-%d")
+    html = f"""
+    <html><head><meta charset="UTF-8">
+    <style>
+        body {{font-family: Arial, sans-serif; margin:40px;}}
+        h1 {{color:#0C2340; text-align:center;}}
+        h2 {{color:#D4AF37;}}
+        table {{width:100%; border-collapse:collapse; margin:20px 0;}}
+        th, td {{border:1px solid #aaa; padding:8px; text-align:center;}}
+        th {{background:#0C2340; color:white;}}
+        .assist {{background:#FFF8E1;}} .room302 {{background:#D1FAE5;}}
+        .room303 {{background:#FEE2E2;}} .room202 {{background:#FEF3C7;}}
+    </style></head><body>
+    <h1>Sing Yin Secondary School</h1>
+    <h2>Study Prefect Duty Roster</h2>
+    <p style="text-align:center;">{today}</p>
     """
-    動態生成奢華網頁外觀並轉換為高解析度 PDF (完美融合校徽圖片與降級備用渲染)
-    """
-    logo_html = ""
-    if logo_data:
-        try:
-            logo_b64 = base64.b64encode(logo_data).decode()
-            logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="height:65px; display:block; margin:0 auto 10px auto;">'
-        except Exception:
-            pass
-            
-    html_content = f"""
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; padding: 20px; }}
-            .header-container {{ text-align: center; margin-bottom: 30px; }}
-            h1 {{ color: #0C2340; text-align: center; border-bottom: 2px solid #D4AF37; padding-bottom: 10px; margin-top: 5px; }}
-            h2 {{ color: #0C2340; margin-top: 25px; font-size: 18px; }}
-            table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; }}
-            th, td {{ border: 1px solid #ddd; padding: 10px; text-align: left; }}
-            th {{ background-color: #0C2340; color: white; font-weight: bold; }}
-            tr:nth-child(even) {{ background-color: #f9f9f9; }}
-        </style>
-    </head>
-    <body>
-        <div class="header-container">
-            {logo_html}
-            <h1>Sing Yin Secondary School</h1>
-            <p style="color: #D4AF37; font-weight: bold; font-size: 16px; margin: 5px 0; text-align: center;">STUDY PREFECT DUTY ROSTER & WORKLOAD AUDIT REPORT</p>
-            <p style="text-align: center; font-size: 12px; color: #666;">Generated Date: {datetime.date.today().strftime('%Y-%m-%d')}</p>
-        </div>
-        
-        <h2>1. Weekly Duty Roster</h2>
-        {roster_df.to_html(classes='table')}
-        
-        <h2>2. Dynamic Workload Audit Summary</h2>
-        {report_df.to_html(index=False, classes='table')}
-    </body>
-    </html>
-    """
-    if PDF_AVAILABLE:
-        try:
-            return HTML(string=html_content).write_pdf(), "pdf"
-        except Exception:
-            return html_content.encode('utf-8'), "html"
+    if logo_b64:
+        html += f'<img src="data:image/png;base64,{logo_b64}" style="display:block;margin:20px auto;width:160px;">'
+    html += "<h3>本週值班表</h3>" + roster_df.to_html(escape=False, classes=['table'])
+    html += "<h3>全體工作量統計</h3>" + master_report_df.to_html(index=False, escape=False)
+    html += "</body></html>"
+    return HTML(string=html).write_pdf()
+
+# ==========================================
+# 8. 側邊欄
+# ==========================================
+with st.sidebar:
+    st.header("🏫 Sing Yin Secondary School")
+    uploaded_logo = st.file_uploader("上傳校徽 (PNG)", type=["png"])
+    if uploaded_logo:
+        st.session_state.logo_data = uploaded_logo.getvalue()
+
+    st.write("---")
+    st.header("🗄️ 數據導入")
+    if st.button("💡 一鍵載入 Sing Yin 示範數據"):
+        demo_data = [
+            {"name": "陳卓軒", "form": "F.5", "class": "5A", "role": "Assistant Head Study Prefect", "fixed_general_duty": "MONDAY", "available": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY", "history_duties": 12, "history_weight": 12.0, "remarks": "隊長"},
+            {"name": "李浩然", "form": "F.5", "class": "5B", "role": "Assistant Head Study Prefect", "fixed_general_duty": "WEDNESDAY", "available": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY", "history_duties": 10, "history_weight": 10.0, "remarks": ""},
+            {"name": "張凱傑", "form": "F.4", "class": "4A", "role": "Study Prefect", "fixed_general_duty": "NONE", "available": "MONDAY,WEDNESDAY,THURSDAY,FRIDAY", "history_duties": 9, "history_weight": 13.5, "remarks": ""},
+            {"name": "黃子軒", "form": "F.4", "class": "4B", "role": "Study Prefect", "fixed_general_duty": "NONE", "available": "TUESDAY,WEDNESDAY,FRIDAY", "history_duties": 8, "history_weight": 12.0, "remarks": ""},
+            {"name": "林俊傑", "form": "F.3", "class": "3A", "role": "Study Prefect", "fixed_general_duty": "NONE", "available": "MONDAY,TUESDAY,THURSDAY", "history_duties": 6, "history_weight": 9.0, "remarks": "需老帶新"},
+            {"name": "王偉倫", "form": "F.5", "class": "5C", "role": "Study Prefect", "fixed_general_duty": "NONE", "available": "MONDAY,WEDNESDAY,FRIDAY", "history_duties": 7, "history_weight": 10.5, "remarks": ""},
+            {"name": "劉家豪", "form": "F.4", "class": "4C", "role": "Study Prefect", "fixed_general_duty": "NONE", "available": "TUESDAY,THURSDAY", "history_duties": 5, "history_weight": 7.5, "remarks": ""},
+        ]
+        st.session_state.students_df = pd.DataFrame(demo_data)
+        st.success("✅ Sing Yin 示範數據已載入")
+        st.rerun()
+
+    st.write("---")
+    st.header("👥 在線名冊編輯")
+    edited_df = st.data_editor(
+        st.session_state.students_df,
+        column_config={
+            "name": st.column_config.TextColumn("姓名 *", required=True),
+            "form": st.column_config.SelectboxColumn("年級", options=["F.3", "F.4", "F.5"]),
+            "role": st.column_config.SelectboxColumn("職級", options=["Study Prefect", "Assistant Head Study Prefect"]),
+            "available": st.column_config.TextColumn("可用日子", default="MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY"),
+            "history_duties": st.column_config.NumberColumn("歷史累計(次)", disabled=True),
+            "history_weight": st.column_config.NumberColumn("歷史累計(點)", disabled=True),
+        },
+        num_rows="dynamic", use_container_width=True, hide_index=True
+    )
+    st.session_state.students_df = edited_df
+
+    st.write("---")
+    st.header("🛑 突發請假名單")
+    valid_names_list = [str(name).strip() for name in st.session_state.students_df["name"].dropna() if str(name).strip()]
+    leave_students = st.multiselect("全天請假同學", options=valid_names_list, default=st.session_state.leave_tracker_input)
+
+# ==========================================
+# 主畫面
+# ==========================================
+st.markdown('<p class="main-title">🦅 SING YIN STUDY PREFECT ROSTER</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-subtitle">F.3–F.5 Study Prefect Duty Platform | v9.0 最終完整版</p>', unsafe_allow_html=True)
+
+closure_options = [f"{d} - {room}" for d in DAYS for room in ["Room302", "Room303", "Room202"] if not (room == "Room202" and d in ["TUESDAY", "FRIDAY"])]
+selected_closures = st.multiselect("🛠️ 設定本週特殊不開放時段", options=closure_options)
+
+col1, col2, col3 = st.columns([2, 1.5, 1.5])
+with col1:
+    if st.button("🚀 生成本週全新值班表", type="primary", use_container_width=True):
+        with st.spinner("智慧排班計算中..."):
+            seed = random.randint(10000, 99999)
+            st.session_state.roster_df = generate_roster(st.session_state.students_df, leave_students, selected_closures, seed)
+            st.success(f"✅ 排班完成！種子碼: {seed}")
+
+with col2:
+    if st.button("🗑️ 一鍵清空本週排班", type="secondary", use_container_width=True):
+        st.session_state.show_clear_confirm = True
+
+if st.session_state.show_clear_confirm:
+    st.markdown('<div class="warning-alert"><b>⚠️ 確定要清除全部排班？此操作無法復原！</b></div>', unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    if c1.button("確定清空", type="primary"):
+        st.session_state.roster_df = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
+        st.session_state.show_clear_confirm = False
+        st.rerun()
+    if c2.button("取消"):
+        st.session_state.show_clear_confirm = False
+        st.rerun()
+
+with col3:
+    if st.button("📄 匯出 PDF 列印版", type="primary", use_container_width=True):
+        typo, _, _, _, master_df = validate_and_compute(st.session_state.roster_df, st.session_state.students_df)
+        if typo:
+            st.error("請先修正姓名錯誤")
+        elif PDF_AVAILABLE and st.session_state.logo_data:
+            logo_b64 = base64.b64encode(st.session_state.logo_data).decode()
+            pdf_bytes = generate_pdf(st.session_state.roster_df, master_df, logo_b64)
+            st.download_button("💾 下載 PDF", pdf_bytes, f"SYSS_Roster_{datetime.date.today()}.pdf", "application/pdf", use_container_width=True)
+        elif PDF_AVAILABLE:
+            pdf_bytes = generate_pdf(st.session_state.roster_df, master_df)
+            st.download_button("💾 下載 PDF", pdf_bytes, f"SYSS_Roster_{datetime.date.today()}.pdf", "application/pdf", use_container_width=True)
+        else:
+            st.info("💡 PDF 功能需 weasyprint 支援")
+
+# ==========================================
+# Tabs、驗證、替補系統
+# ==========================================
+typo_detected, vacuum_detected, invalid_entries, vacuum_entries, master_report_df = validate_and_compute(st.session_state.roster_df, st.session_state.students_df)
+
+if typo_detected:
+    st.markdown(f'<div class="danger-alert"><b>⚠️ 偵測到無效姓名：</b><br>' + '<br>'.join(invalid_entries) + '</div>', unsafe_allow_html=True)
+elif vacuum_detected:
+    st.markdown(f'<div class="warning-alert"><b>💡 存在未排班的開放時段：</b><br>' + '<br>'.join(vacuum_entries) + '</div>', unsafe_allow_html=True)
+
+tab_edit, tab_view = st.tabs(["✏️ 互動微調模式", "🎨 彩色列印預覽"])
+with tab_edit:
+    updated_df = st.data_editor(st.session_state.roster_df, use_container_width=True, height=320)
+    st.session_state.roster_df = updated_df
+with tab_view:
+    styled = st.session_state.roster_df.style.apply(lambda col: ["color: #EF4444; font-weight: bold;" if v == "X" else "" for v in col], axis=0)
+    st.dataframe(styled, use_container_width=True, height=320)
+
+# 智慧替補
+st.write("---")
+st.subheader("🔄 突發請假？智慧替補推薦系統")
+c1, c2 = st.columns(2)
+with c1:
+    chosen_day = st.selectbox("請假日期", DAYS)
+with c2:
+    chosen_role = st.selectbox("請假崗位", ROWS_ROSTER)
+
+current_person = str(st.session_state.roster_df.at[chosen_role, chosen_day]).strip()
+st.text_input("目前該時段人員", value=current_person if current_person not in ["", "X"] else "（無人）", disabled=True)
+
+if st.button("🔍 尋找最優替補", type="primary"):
+    sub_df, msg = recommend_substitutes(st.session_state.roster_df, st.session_state.students_df, chosen_day, chosen_role)
+    if sub_df is not None:
+        st.success("📋 推薦替補名單（按總負荷由低到高排序）")
+        st.dataframe(sub_df, use_container_width=True, hide_index=True)
     else:
-        return html_content.encode('utf-8'), "html"
+        st.warning(msg)
 
-# ==========================================
-# 6. 主面板邏輯：智能數據對齊與自動化排班核心
-# ==========================================
-if uploaded_file is not None:
-    try:
-        if uploaded_file.name.endswith('.csv'):
-            df_input = pd.read_csv(uploaded_file)
-        else:
-            df_input = pd.read_excel(uploaded_file)
-            
-        # 寬容型原始名冊彈性名稱映射器，高度相容多種新舊中英文報表格式
-        field_mapping = {
-            '姓名': '學生姓名 (Prefect Name)', 'name': '學生姓名 (Prefect Name)', 'Prefect Name': '學生姓名 (Prefect Name)', '學生姓名': '學生姓名 (Prefect Name)',
-            '年級': '年級 (Form)', 'form': '年級 (Form)', 'Form': '年級 (Form)',
-            '職級': '職級 (Role)', 'role': '職級 (Role)', 'Role': '職級 (Role)',
-            '可用日子': '可用日子 (Available Days)', 'available': '可用日子 (Available Days)', 'Available Days': '可用日子 (Available Days)', '可用天數': '可用日子 (Available Days)',
-            '歷史動態(點)': '歷史累積負荷 (點)', 'history_weight': '歷史累積負荷 (點)', '歷史點數': '歷史累積負荷 (點)', '歷史累積': '歷史累積負荷 (點)', '歷史累積負荷 (點)': '歷史累積負荷 (點)'
-        }
-        
-        df_input = df_input.rename(columns=lambda x: field_mapping.get(str(x).strip(), str(x).strip()))
-        
-        # 核心結構強制安全性校驗
-        required_cols = ["學生姓名 (Prefect Name)", "職級 (Role)", "可用日子 (Available Days)", "年級 (Form)"]
-        if not all(c in df_input.columns for c in required_cols):
-            st.error(f"❌ 上載的檔案結構不正確，必須包含以下基本欄位（或可辨識的對應欄位）：{required_cols}")
-        else:
-            if "歷史累積負荷 (點)" not in df_input.columns:
-                df_input["歷史累積負荷 (點)"] = 0.0
-            else:
-                df_input["歷史累積負荷 (點)"] = pd.to_numeric(df_input["歷史累積負荷 (點)"], errors='coerce').fillna(0.0)
-                
-            df_input["最終總計加權負荷 (點)"] = df_input["歷史累積負荷 (點)"]
-            st.session_state.students_df = df_input
-            st.success("🎉 學生名冊原始數據載入成功，並已完成欄位對齊校驗！")
-    except Exception as e:
-        st.error(f"讀取名冊檔案時發生系統錯誤: {e}")
-
-if st.session_state.students_df is not None:
-    st.write("### 📋 領袖生名冊管理系統維護")
-    st.dataframe(st.session_state.students_df, use_container_width=True)
-    
-    # 觸發自動排班按鈕
-    if st.button("🚀 開始執行智慧平衡排班演算法", type="primary"):
-        with st.spinner("智慧最優化公平引擎計算中，請稍候..."):
-            roster = pd.DataFrame(index=DAYS, columns=COLUMNS_ROSTER).fillna("")
-            local_students = st.session_state.students_df.copy()
-            local_students["最終總計加權負荷 (點)"] = local_students["歷史累積負荷 (點)"].astype(float)
-            
-            # 排班策略：建立時段清單並確保 AHP 擁有最高調度優先權
-            melted_slots = []
-            for d in DAYS:
-                for c in COLUMNS_ROSTER:
-                    priority = 0 if c == "Assistant Head Study Prefect (AHP)" else 1
-                    melted_slots.append((priority, d, c))
-            
-            # 【Bug 修復】：優化排序鍵值，一級排序依職務級別，二級排序依週一至週五時間自然序，拒絕字串首字母隨機排序
-            melted_slots.sort(key=lambda x: (x, DAYS.index(x[1])))
-            
-            # 執行約束條件貪心分配
-            for _, day, role in melted_slots:
-                is_ahp = (role == "Assistant Head Study Prefect (AHP)")
-                assigned_today = [x for x in roster.loc[day].values if x != ""]
-                
-                # 容錯匹配：支持全稱與簡寫
-                cond_day = local_students["可用日子 (Available Days)"].str.upper().str.contains(day.upper(), na=False) | \
-                           local_students["可用日子 (Available Days)"].str.upper().str.contains(day.upper()[:3], na=False)
-                
-                if is_ahp:
-                    cond_role = local_students["職級 (Role)"] == "Assistant Head Study Prefect"
-                else:
-                    cond_role = local_students["職級 (Role)"] != "Assistant Head Study Prefect"
-                    
-                candidates = local_students[cond_day & cond_role & (~local_students["學生姓名 (Prefect Name)"].isin(assigned_today))]
-                
-                if candidates.empty:
-                    roster.at[day, role] = "❌ 無合適人員"
-                    continue
-                
-                # 核心動態負載天平分配
-                min_load = candidates["最終總計加權負荷 (點)"].min()
-                best_candidates = candidates[candidates["最終總計加權負荷 (點)"] == min_load]
-                
-                chosen_one = random.choice(best_candidates["學生姓名 (Prefect Name)"].values)
-                roster.at[day, role] = chosen_one
-                
-                idx = local_students[local_students["學生姓名 (Prefect Name)"] == chosen_one].index
-                local_students.loc[idx, "最終總計加權負荷 (點)"] += weight_map[role]
-            
-            st.session_state.roster_df = roster
-            recalculate_workload()
-            st.success("✨ 智慧公平排班表生成完畢！已完美均勻分配工作量。")
-
-# ==========================================
-# 7. 報表展示與高階微調同步引擎
-# ==========================================
-if st.session_state.roster_df is not None:
+# 公平性圖表
+if not master_report_df.empty:
     st.write("---")
-    st.subheader("📅 本週 Study Prefect 輪值排班總表 (支援現場互動微調修正)")
-    
-    updated_roster = st.data_editor(st.session_state.roster_df, use_container_width=True)
-    
-    col_save1, col_save2 = st.columns([3, 7])
-    with col_save1:
-        if st.button("🔄 儲存手動微調並同步更新數據", type="secondary"):
-            st.session_state.roster_df = updated_roster
-            recalculate_workload()
-            st.success("📝 手動微調覆寫已儲存！所有統計報表、公平性校驗圖已完成即時聯動更新。")
-            st.rerun()
-            
-    st.write("---")
-    st.subheader("📊 領袖生加權工作量全景審計與監控")
-    
-    col_graph, col_tbl = st.columns([6, 4])
-    
-    with col_tbl:
-        st.write("📋 動態審計明細表 (依最終總負荷由高至低)")
-        sorted_report = st.session_state.report_df.sort_values(by="最終總計加權負荷 (點)", ascending=False)
-        st.dataframe(sorted_report, use_container_width=True, hide_index=True)
-        
-    with col_graph:
-        # 【視覺優化】：自定義尊貴藍金漸層色階(Navy Blue -> Gold)，完美切合聖言中學視覺意向
-        fig = px.bar(
-            st.session_state.report_df, 
-            x='學生姓名 (Prefect Name)', 
-            y='最終總計加權負荷 (點)',
-            text_auto='.2f',  # 整合舊版精準度設定
-            title="領袖生工作分配公平性監控圖表 (藍金專屬視覺)",
-            color='最終總計加權負荷 (點)',
-            color_continuous_scale=[[0, '#0C2340'], [1, '#D4AF37']]
-        )
-        fig.update_layout(xaxis_tickangle=-45)
-        st.plotly_chart(fig, use_container_width=True)
+    st.subheader("📊 全體工作量公平性監控")
+    fig = px.bar(master_report_df, x='學生姓名 (Prefect Name)', y='最終總計加權負荷 (點)', text_auto='.1f', color_continuous_scale='YlOrBr')
+    st.plotly_chart(fig, use_container_width=True)
 
-    # ==========================================
-    # 8. 高級多格式數據導出面板
-    # ==========================================
-    st.write("---")
-    st.subheader("📥 導出行政官方排班報告文件")
-    
-    dl_col1, dl_col2, dl_col3 = st.columns(3)
-    
-    # Excel 完整導出 + 行政自動優化欄寬
-    output_excel = io.BytesIO()
-    with pd.ExcelWriter(output_excel, engine='xlsxwriter') as writer:
-        st.session_state.roster_df.to_excel(writer, sheet_name='本週排班總表')
-        st.session_state.report_df.to_excel(writer, sheet_name='動態負荷工作量審計', index=False)
-        # 高級行政優化：調整欄寬防遮擋
-        for sheet_name in writer.sheets:
-            writer.sheets[sheet_name].set_column(0, 10, 22)
-            
-    dl_col1.download_button(
-        label="🟢 下載 Excel 試算表 (.xlsx)",
-        data=output_excel.getvalue(),
-        file_name=f"SYSS_Prefect_Roster_{datetime.date.today().strftime('%Y%m%d')}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True
-    )
-    
-    # Markdown 文字導出
-    md_data = f"### Sing Yin Secondary School Study Prefect Duty Roster\nReport Date: {datetime.date.today()}\n\n" + st.session_state.roster_df.to_markdown()
-    dl_col2.download_button(
-        label="📝 下載 Markdown 簡報字檔 (.md)",
-        data=md_data.encode('utf-8'),
-        file_name=f"SYSS_Prefoster_{datetime.date.today().strftime('%Y%m%d')}.md",
-        mime="text/plain",
-        use_container_width=True
-    )
-    
-    # 高階 PDF 導出通道
-    report_bytes, file_type = generate_pdf_bytes(st.session_state.roster_df, st.session_state.report_df, st.session_state.logo_data)
-    if file_type == "pdf":
-        dl_col3.download_button(
-            label="🔴 下載 PDF 官方列印報表 (.pdf)",
-            data=report_bytes,
-            file_name=f"SYSS_Report_{datetime.date.today().strftime('%Y%m%d')}.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
-    else:
-        dl_col3.download_button(
-            label="🌐 下載網頁版 HTML 報表 (PDF 降級備用)",
-            data=report_bytes,
-            file_name=f"SYSS_Report_{datetime.date.today().strftime('%Y%m%d')}.html",
-            mime="text/html",
-            use_container_width=True
-        )
-
-    # ==========================================
-    # 9. 智慧請假應變替補建議模組
-    # ==========================================
-    st.write("---")
-    st.subheader("🩹 臨時突發請假緊急應變？智慧替補推薦")
-    
-    sub_col1, sub_col2 = st.columns(2)
-    with sub_col1:
-        chosen_day = st.selectbox("請假日期 (星期)", DAYS, key="sub_day_select")
-    with sub_col2:
-        chosen_role = st.selectbox("請假職位/房間區塊", COLUMNS_ROSTER, key="sub_role_select")
-        
-    current_person = str(st.session_state.roster_df.at[chosen_day, chosen_role]).strip()
-    st.text_input(
-        "當前原定受指派之人員", 
-        value=current_person if current_person not in ["", "❌ 無合適人員", "X"] else "（當前時段本為空缺狀態）", 
-        disabled=True
-    )
-    
-    if st.button("🔍 執行智慧篩選並推薦最優替補候選名單"):
-        res_df, err = recommend_substitutes(st.session_state.roster_df, st.session_state.students_df, chosen_day, chosen_role)
-        if err:
-            st.error(err)
-        else:
-            st.success(f"📋 依「當前總計負荷最少者優先」篩選之完美替補名單（已自動識別全稱/縮寫、剔除當天有任務、非同等職級與不可用者）：")
-            st.dataframe(res_df, use_container_width=True, hide_index=True)
-else:
-    st.info("💡 提示：請先於左側邊欄上載 Prefects 原始名冊或導入 JSON 系統備份檔，以開啟自動化排班決策功能。")
+st.caption("Sing Yin Secondary School Study Prefect Platform | v9.0 最終完整穩定版（符合根本編程誡命）")
