@@ -2,10 +2,12 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import io
 from config import DAYS, ROWS_ROSTER, DAILY_VERSES, VERSION, APP_TITLE
 from utils import generate_pdf, export_system_backup, process_roster_import
 from core import validate_and_compute, recommend_substitutes
 from data import get_demo_dataframe, get_sample_format_dataframe
+from ai_parser import ai_parse_remarks
 
 # ==========================================
 # 每日金句顯示元件
@@ -38,10 +40,10 @@ def show_sidebar_stats(students_df):
         st.info("尚未載入名冊")
 
 # ==========================================
-# 側邊欄完整 UI 元件
+# 側邊欄完整 UI 元件（已加入 AI 智能解析）
 # ==========================================
 def render_sidebar():
-    """完整側邊欄 UI"""
+    """完整側邊欄 UI（已整合 AI 解析）"""
     st.header("🏫 Sing Yin Secondary School")
     
     # 校徽上傳
@@ -101,6 +103,17 @@ def render_sidebar():
         key="student_editor_widget", on_change=st.session_state.get("sync_students_data")
     )
 
+    # 新增：AI 智能解析 Remarks 按鈕
+    st.write("---")
+    st.header("🤖 AI 智能解析 Remarks")
+    st.caption("AI 會自動理解「固定週一」「可用三五」「隊長」「老帶新」等描述，並更新對應欄位")
+    if st.button("🚀 執行 AI 智能解析 Remarks", type="secondary", use_container_width=True):
+        with st.spinner("AI 正在智能解析所有 remarks..."):
+            updated_df = ai_parse_remarks(st.session_state.students_df)
+            st.session_state.students_df = updated_df
+            st.success("✅ AI 智能解析完成！已自動更新固定值班、可用日子、職級等欄位")
+            st.rerun()
+
     st.write("---")
     st.header("🛑 突發臨時請假登記")
     valid_names_list = [str(name).strip() for name in st.session_state.students_df["name"].dropna() if str(name).strip()]
@@ -112,7 +125,6 @@ def render_sidebar():
 
     st.write("---")
     st.header("💾 Cloud 備份系統")
-    # 備份按鈕已在主畫面處理，這裡保留提醒
     st.caption("💡 生成值班表後，系統會自動提醒備份")
 
 # ==========================================
