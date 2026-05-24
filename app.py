@@ -44,14 +44,13 @@ st.markdown("""
 # ==========================================
 DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY']
 ROWS_ROSTER = [
-    'Assist. in charge (General Duty)',          
-    'Room302 STUDY ROOM (15:40-18:30)',          
-    'Room303 HW COMPLETION (15:40-17:00) - 1',    
-    'Room303 HW COMPLETION (15:40-17:00) - 2',    
-    'Room202 F1 STUDY GROUP (15:40-17:00) - 1',   
-    'Room202 F1 STUDY GROUP (15:40-17:00) - 2'    
+    'Assist. in charge (General Duty)',
+    'Room302 STUDY ROOM (15:40-18:30)',
+    'Room303 HW COMPLETION (15:40-17:00) - 1',
+    'Room303 HW COMPLETION (15:40-17:00) - 2',
+    'Room202 F1 STUDY GROUP (15:40-17:00) - 1',
+    'Room202 F1 STUDY GROUP (15:40-17:00) - 2'
 ]
-
 WEIGHTS = {
     'Assist. in charge (General Duty)': 1.0,
     'Room302 STUDY ROOM (15:40-18:30)': 1.0,
@@ -106,7 +105,7 @@ HELP_TEXT = """
 2. **主畫面 → 點擊「🚀 智能計算」**  
    - 系統會自動產生公平值班表（已考慮 Room202 週二、五關閉、老帶新、歷史點數等規則）  
 3. **導出**  
-   - PDF（彩色 A4 橫式公告版）、Excel、Markdown、JSON 完整備份  
+   - PDF（彩色 A4 橫式公告版）、Excel、Markdown、**JSON 完整備份**  
 
 ### 進階功能
 - **一鍵清空本週排班** → 確認後全部清除  
@@ -119,7 +118,7 @@ HELP_TEXT = """
 Q：Room202 為什麼有些格子是灰色？  
 A：因為週二、五常規不開放，已自動標記空白。  
 
-如需更多客製化（例如新增 Logo 水印、調整權重），請告訴我您的需求！
+如需更多客製化，請告訴我您的需求！
 """
 
 # ==========================================
@@ -170,7 +169,7 @@ def process_roster_import(uploaded_file):
         st.sidebar.error(f"❌ 導入失敗，格式不符。錯誤訊息: {str(e)}")
 
 # ==========================================
-# 5b. 數據備份導出與還原恢復引擎（已完整補回）
+# 備份導出與還原（永遠顯示）
 # ==========================================
 def export_system_backup(master_df):
     backup_data = {
@@ -217,7 +216,7 @@ def import_system_backup(uploaded_json_file):
         st.sidebar.error(f"❌ 備份還原失敗，格式錯誤: {str(e)}")
 
 # ==========================================
-# 6. 核心排班演算法（完整無省略）
+# 核心排班演算法（完整無省略）
 # ==========================================
 def generate_roster(students_df: pd.DataFrame, leave_students: list, special_closures: list, seed: int) -> pd.DataFrame:
     if students_df.empty or students_df['name'].str.strip().eq('').all():
@@ -227,14 +226,12 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
     rng = random.Random(seed)
     new_roster = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
 
-    # 保留手動標記的 "X"
     for r in ROWS_ROSTER:
         for d in DAYS:
             if r in st.session_state.roster_df.index and d in st.session_state.roster_df.columns:
                 if str(st.session_state.roster_df.at[r, d]).strip().upper() == "X":
                     new_roster.at[r, d] = "X"
 
-    # 特殊不開放時段
     for item in special_closures:
         try:
             day_part, room_part = item.split(" - ")
@@ -244,7 +241,6 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
         except ValueError:
             continue
 
-    # 固定總值班處理
     for _, s in students_df.iterrows():
         name = str(s.get('name', '')).strip()
         fixed_day = str(s.get('fixed_general_duty', '')).strip().upper()
@@ -281,7 +277,6 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
         for role in dynamic_roles:
             if new_roster.at[role, day] == "X":
                 continue
-
             if 'Room202' in role and day in ['TUESDAY', 'FRIDAY']:
                 new_roster.at[role, day] = ""
                 continue
@@ -336,9 +331,8 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
     return new_roster
 
 # ==========================================
-# 7-16. 其餘所有函數與主畫面（完整版）
+# 驗證、替補、PDF 等其餘函數（完整版）
 # ==========================================
-# （以下為之前 Part 2 的全部內容，已確認無省略）
 def validate_and_compute(roster_df: pd.DataFrame, students_df: pd.DataFrame, leave_students: list):
     valid_names = set(str(name).strip() for name in students_df["name"].dropna() if str(name).strip())
     typo_detected = False
@@ -571,24 +565,24 @@ with st.sidebar:
     )
 
     st.write("---")
-    st.header("💾 Cloud 備份系統")
+    st.header("💾 Cloud 備份系統（永遠顯示）")
+    # 永遠顯示備份按鈕
     audit_results_pre = validate_and_compute(st.session_state.roster_df, st.session_state.students_df, leave_students)
     current_master_df = audit_results_pre["report_df"]
-    if not current_master_df.empty:
-        json_backup_string = export_system_backup(current_master_df)
-        st.download_button(
-            label="⬇️ 導出當前大表全狀態備份 (JSON)",
-            data=json_backup_string,
-            file_name=f"SYSS_Master_Roster_Backup_{datetime.date.today().strftime('%Y%m%d')}.json",
-            mime="application/json",
-            use_container_width=True
-        )
+    json_backup_string = export_system_backup(current_master_df)
+    st.download_button(
+        label="⬇️ 導出當前大表全狀態備份 (JSON)",
+        data=json_backup_string,
+        file_name=f"SYSS_Master_Roster_Backup_{datetime.date.today().strftime('%Y%m%d')}.json",
+        mime="application/json",
+        use_container_width=True
+    )
     uploaded_backup = st.file_uploader("上傳備份還原", type=["json"])
     if uploaded_backup and st.button("還原歷史數據"):
         import_system_backup(uploaded_backup)
 
 # ==========================================
-# 主畫面
+# 主畫面（完整 UI）
 # ==========================================
 st.markdown('<p class="main-title">🦅 SING YIN STUDY PREFECT ROSTER</p>', unsafe_allow_html=True)
 st.markdown('<p class="main-subtitle">F.3–F.5 Study Prefect Duty Platform | v1.0 最終完整版</p>', unsafe_allow_html=True)
@@ -663,7 +657,7 @@ if leave_conflict_detected:
 elif vacuum_detected:
     st.markdown('<div class="warning-alert"><b>💡 提示：存在未配對的開門空缺（若手動填寫 X 代表不開放則忽略此訊息）：</b><br>' + '<br>'.join(vacuum_entries) + '</div>', unsafe_allow_html=True)
 
-# 雙軌呈現 + 導出 + 圖表 + 替補
+# 雙軌呈現
 def apply_cell_style(val, role, day):
     val = str(val).strip()
     if val == "X": return "color: #EF4444; font-weight: bold; text-align: center; background-color: #FEF2F2;"
@@ -680,7 +674,6 @@ def apply_cell_style(val, role, day):
 
 st.write("---")
 st.subheader("📅 本週班表狀態與動態調整通道")
-
 tab_view, tab_edit = st.tabs(["📅 奢華藍金值班表 (視覺公告版)", "✏️ 互動式手動修改 (動態校準版)"])
 
 with tab_view:
@@ -704,10 +697,10 @@ with tab_edit:
         st.session_state.roster_df = edited_roster_df
         st.rerun()
 
+# 多格式導出、圖表、替補系統（完整保留）
 st.write("---")
 st.markdown("### 📊 行政名冊與排班數據多格式導出")
 dl_col1, dl_col2 = st.columns(2)
-
 with dl_col1:
     try:
         output_excel = io.BytesIO()
@@ -753,16 +746,11 @@ if not master_report_df.empty:
         color='最終總計加權負荷 (點)', 
         color_continuous_scale='gold'
     )
-    fig.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=20, r=20, t=40, b=20)
-    )
+    fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', margin=dict(l=20, r=20, t=40, b=20))
     st.plotly_chart(fig, use_container_width=True)
 
 st.write("---")
 st.subheader("🔍 臨時請假？智慧替補候選人精準建議")
-
 sub_col1, sub_col2 = st.columns(2)
 with sub_col1:
     chosen_day = st.selectbox("請假或替換日期 (星期)", DAYS, index=0, key="sub_day_selector")
