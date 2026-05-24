@@ -6,10 +6,4 @@ libffi8
 fontconfig
 fonts-dejavu
 fonts-noto
-libjpeg62-turbo
-libopenjp2-7
-libtiff6
-libwebp7
-zlib1g
-libpng16-16
 libfreetype6
