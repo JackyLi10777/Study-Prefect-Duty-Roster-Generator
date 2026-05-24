@@ -1,1 +1,3 @@
 weasyprint
+fonts-noto-cjk
+fonts-noto-cjk-extra
