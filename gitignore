@@ -1,0 +1,98 @@
+# ==========================================
+# .gitignore
+# Sing Yin Study Prefect Duty Roster - v1.3 模組化 + AI 版
+# 專案專用 Git 忽略設定
+# ==========================================
+
+# ==================== Python 相關 ====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ==================== 虛擬環境 ====================
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# ==================== Streamlit 相關 ====================
+.streamlit/secrets.toml          # 敏感資訊絕不上傳
+.streamlit/*.log
+.streamlit/debug.log
+
+# ==================== 資料與暫存檔案 ====================
+*.xlsx
+*.xls
+*.csv
+*.pdf
+*.json
+*.md.bak
+*.log
+.DS_Store
+Thumbs.db
+*.tmp
+*.temp
+
+# ==================== IDE / 編輯器 ====================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+.ropeproject/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.cache
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# ==================== 其他不需要上傳的 ====================
+*.sqlite3
+*.db
+node_modules/
+*.min.js
+*.map
+*.pyc
+*.pyd
+*.pyo
+
+# ==================== 保留但不忽略的提醒 ====================
+# 以下檔案**必須保留**在上傳：
+# - .streamlit/config.toml
+# - requirements.txt
+# - packages.txt
+# - README.md
+# - 所有 .py 模組檔案
+
+# ==========================================
+# 使用說明
+# 1. 建立這個 .gitignore 後，Git 就不會追蹤上述檔案
+# 2. 未來如果有敏感資訊（如 API Key），請放在 .streamlit/secrets.toml
+# ==========================================
