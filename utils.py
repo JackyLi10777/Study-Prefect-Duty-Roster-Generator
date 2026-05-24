@@ -1,0 +1,153 @@
+# utils.py
+import streamlit as st
+import pandas as pd
+import io
+import json
+import datetime
+import base64
+from config import DAYS, ROWS_ROSTER, WEIGHTS, DAILY_VERSES
+
+# ==========================================
+# PDF 生成工具
+# ==========================================
+def generate_pdf(roster_df, master_report_df, logo_b64=None):
+    """生成 A4 橫式彩色 PDF"""
+    today = datetime.date.today().strftime("%Y-%m-%d")
+    html_table = roster_df.to_html(classes='table')
+    report_table = master_report_df[["學生姓名 (Prefect Name)", "年級 (Form)", "班別 (Class)", "職級 (Role)", "當週新增 (次)", "最終總計加權負荷 (點)"]].to_html(index=False, classes='table')
+    
+    html = f"""
+    <html><head><meta charset="UTF-8">
+    <style>
+        @page {{ size: A4 landscape; margin: 20mm; }}
+        body {{ font-family: Arial, sans-serif; color: #333; line-height: 1.4; }}
+        .header-container {{ text-align: center; margin-bottom: 25px; }}
+        h1 {{ color:#0C2340; font-size: 26px; margin: 5px 0; letter-spacing: 1px; }}
+        h2 {{ color:#D4AF37; font-size: 16px; margin: 0 0 10px 0; font-weight: 600; text-transform: uppercase; }}
+        .date-sub {{ font-size: 11px; color: #666; margin-bottom: 20px; }}
+        h3 {{ color:#0C2340; border-left: 5px solid #D4AF37; padding-left: 10px; margin-top: 30px; font-size: 16px; }}
+        table {{ width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 11px; }}
+        th, td {{ border: 1px solid #D1D5DB; padding: 8px 10px; text-align: center; }}
+        th {{ background-color: #0C2340; color: white; font-weight: bold; font-size: 10px; }}
+        td {{ font-weight: bold; color: #1F2937; }}
+        tr:nth-child(even) td {{ background-color: #F9FAFB; }}
+    </style></head><body>
+    <div class="header-container">
+    """
+    if logo_b64:
+        html += f'<img src="data:image/png;base64,{logo_b64}" style="height:65px; margin-bottom:10px;">'
+    html += f"""
+        <h1>Sing Yin Secondary School</h1>
+        <h2>Study Prefect Duty Roster & Workload Audit</h2>
+        <div class="date-sub">Report Generated Date: {today}</div>
+    </div>
+    <h3>📅 本週值班表 (Weekly Duty Roster)</h3>
+    {html_table}
+    <div style="page-break-before: always;"></div>
+    <h3>📊 累積動態工作負荷審計表 (Workload Audit Report)</h3>
+    {report_table}
+    </body></html>
+    """
+    return HTML(string=html).write_pdf()
+
+# ==========================================
+# 備份與還原工具
+# ==========================================
+def export_system_backup(master_df):
+    """導出完整系統備份"""
+    backup_data = {
+        "master_report": master_df.to_dict(orient="records"),
+        "roster_table": st.session_state.roster_df.to_dict(orient="index"),
+        "leave_tracker": st.session_state.get("leave_tracker_input", [])
+    }
+    return json.dumps(backup_data, ensure_ascii=False, indent=2)
+
+def import_system_backup(uploaded_json_file):
+    """從 JSON 還原系統"""
+    try:
+        data = json.load(uploaded_json_file)
+        if "master_report" in data and "roster_table" in data:
+            raw_master = pd.DataFrame(data["master_report"])
+            mapping_reverse = {
+                "學生姓名 (Prefect Name)": "name",
+                "年級 (Form)": "form",
+                "班別 (Class)": "class",
+                "職級 (Role)": "role",
+                "學年固定總值班": "fixed_general_duty",
+                "最終總計值班次數 (次)": "history_duties",
+                "最終總計加權負荷 (點)": "history_weight",
+                "備註": "remarks"
+            }
+            if "可用日子" not in raw_master.columns:
+                raw_master["available"] = "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY"
+            renamed_df = raw_master.rename(columns=mapping_reverse)
+            required_cols = ["name", "form", "class", "role", "fixed_general_duty", "available", "history_duties", "history_weight", "remarks"]
+            for col in required_cols:
+                if col not in renamed_df.columns:
+                    if col == "fixed_general_duty": renamed_df[col] = "NONE"
+                    elif col in ["history_duties", "history_weight"]: renamed_df[col] = 0
+                    else: renamed_df[col] = ""
+            st.session_state.students_df = renamed_df[required_cols]
+            restored_roster = pd.DataFrame.from_dict(data["roster_table"], orient="index")
+            st.session_state.roster_df = restored_roster.reindex(index=ROWS_ROSTER, columns=DAYS).fillna("")
+            st.session_state.leave_tracker_input = data.get("leave_tracker", [])
+            st.sidebar.success("🔮 備份數據已成功完美還原！")
+            st.rerun()
+        else:
+            st.sidebar.error("❌ 備份檔結構不正確")
+    except Exception as e:
+        st.sidebar.error(f"❌ 備份還原失敗: {str(e)}")
+
+# ==========================================
+# 名冊導入工具（AI-like 自動適配）
+# ==========================================
+def process_roster_import(uploaded_file):
+    """處理名冊導入（支援多種格式）"""
+    try:
+        if uploaded_file.name.endswith('.csv'):
+            df = pd.read_csv(uploaded_file)
+        else:
+            df = pd.read_excel(uploaded_file)
+
+        mapping = {
+            '姓名': 'name', 'name': 'name', 'Prefect Name': 'name', '學生姓名': 'name', '學生': 'name',
+            '年級': 'form', 'form': 'form', 'Form': 'form', 'Grade': 'form',
+            '班別': 'class', 'class': 'class', 'Class': 'class',
+            '職級': 'role', 'role': 'role', 'Role': 'role',
+            '學年固定總值班': 'fixed_general_duty', 'fixed_general_duty': 'fixed_general_duty',
+            '可用日子': 'available', 'available': 'available', '可用天數': 'available',
+            '歷史累計(次)': 'history_duties', 'history_duties': 'history_duties',
+            '歷史動態(點)': 'history_weight', 'history_weight': 'history_weight',
+            '備註': 'remarks', 'remarks': 'remarks'
+        }
+
+        df = df.rename(columns=lambda x: mapping.get(str(x).strip(), str(x).strip()))
+
+        required_cols = ["name", "form", "class", "role", "fixed_general_duty", "available", "history_duties", "history_weight", "remarks"]
+        for col in required_cols:
+            if col not in df.columns:
+                if col == "fixed_general_duty": df[col] = "NONE"
+                elif col == "available": df[col] = "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY"
+                elif col == "history_duties": df[col] = 0
+                elif col == "history_weight": df[col] = 0.0
+                else: df[col] = ""
+
+        df = df[required_cols]
+        df["name"] = df["name"].astype(str).str.strip()
+        df = df[(df["name"] != "") & (df["name"] != "nan")]
+        df["history_duties"] = pd.to_numeric(df["history_duties"], errors='coerce').fillna(0).astype(int)
+        df["history_weight"] = pd.to_numeric(df["history_weight"], errors='coerce').fillna(0.0)
+
+        st.session_state.students_df = df
+        st.sidebar.success(f"🎉 成功導入 {len(df)} 位領袖生名冊！（AI 自動適配完成）")
+        st.rerun()
+    except Exception as e:
+        st.sidebar.error(f"❌ 導入失敗: {str(e)}")
+
+# ==========================================
+# 其他通用工具
+# ==========================================
+def get_daily_verse():
+    """取得今日金句"""
+    today = datetime.date.today().weekday()
+    return DAILY_VERSES.get(today, "「你要專心仰賴耶和華，不可倚靠自己的聰明。」——箴言 3:5")
