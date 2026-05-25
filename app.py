@@ -13,7 +13,7 @@ from utils import generate_pdf, export_system_backup, import_system_backup, proc
 from ui_components import render_sidebar, show_daily_verse, render_control_buttons
 
 # ==========================================
-# Session State 初始化（完整防護）
+# Session State 初始化
 # ==========================================
 if 'students_df' not in st.session_state:
     st.session_state.students_df = pd.DataFrame(columns=["name", "form", "class", "role", "fixed_general_duty", "available", "history_duties", "history_weight", "remarks"])
@@ -27,61 +27,39 @@ if 'leave_tracker_input' not in st.session_state:
     st.session_state.leave_tracker_input = []
 if 'master_report_df' not in st.session_state:
     st.session_state.master_report_df = pd.DataFrame()
+if 'manual_weights' not in st.session_state:   # 新增：手動調整負荷記錄
+    st.session_state.manual_weights = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)
 
 # ==========================================
-# 使用說明書（完整版）
+# 使用說明書
 # ==========================================
 HELP_TEXT = """
 # 📖 Sing Yin Study Prefect Duty Roster 使用說明書  
-**版本**：v1.3 模組化最終版  
+**版本**：v1.4 手動調整負荷版  
 **更新日期**：2026 年 5 月 25 日  
 
+**新增功能**：手動調整每次值班的負荷點數（可針對每個房間/學生本次值班調整累計指數）
+
 **適用對象**：Study Prefect Team Advisor、Head Study Prefect、Assistant Head Study Prefect
-
-### 主要功能
-- 智能公平排班（考慮歷史負荷、可用日子、老帶新、固定總值班）
-- AI 智能解析 Remarks（自動更新固定值班、可用日子、職級）
-- 每日聖經金句
-- 彩色 PDF 公告班表（含校徽）
-- 智慧替補推薦系統
-- Cloud 完整備份 / 還原（解決休眠問題）
-- 名冊即時編輯
-- 累計動態工作負荷審計表
-- 多格式導出（PDF、Excel、Markdown）
-
-### 操作流程
-1. 側邊欄 → 導入或編輯名冊
-2. 側邊欄 → 使用 AI 解析 Remarks（強烈推薦）
-3. 主畫面 → 點擊「🚀 智能計算：生成本週全新公平值班表」
-4. 檢查所有提示並修正
-5. 使用下方 Tabs 預覽 / 手動修改
-6. 導出 PDF / Excel / Markdown / 備份
-
-**如有問題請聯絡開發者**
 """
 
 def main():
-    # 側邊欄（完整呼叫）
     render_sidebar()
 
-    # 主畫面標題
     st.markdown(f'<p class="main-title">{APP_TITLE}</p>', unsafe_allow_html=True)
     st.markdown(f'<p class="main-subtitle">F.3–F.5 Study Prefect Duty Platform | {VERSION}</p>', unsafe_allow_html=True)
     show_daily_verse()
 
-    # 使用說明書
     with st.expander("📖 查看完整使用說明書"):
         st.markdown(HELP_TEXT)
 
-    # 控制按鈕（含一鍵清空）
     selected_closures = render_control_buttons()
 
-    # 驗證與統計
     leave_students = st.session_state.leave_tracker_input
-    audit_results = validate_and_compute(st.session_state.roster_df, st.session_state.students_df, leave_students)
+    audit_results = validate_and_compute(st.session_state.roster_df, st.session_state.students_df, leave_students, st.session_state.manual_weights)
     st.session_state.master_report_df = audit_results["report_df"]
 
-    # 安全提示（完整）
+    # 所有安全提示（完整）
     if audit_results["typo"][0]:
         st.markdown('<div class="danger-alert"><b>⚠️ 數據不符警告：</b><br>' + '<br>'.join(audit_results["typo"][1]) + '</div>', unsafe_allow_html=True)
     if audit_results["duplicate"][0]:
@@ -93,12 +71,12 @@ def main():
                 for r in ROWS_ROSTER:
                     if str(st.session_state.roster_df.at[r, d]).strip() in leave_students:
                         st.session_state.roster_df.at[r, d] = ""
-            st.success("✅ 已清除請假同學")
+            st.success("✅ 已清除")
             st.rerun()
     elif audit_results["vacuum"][0]:
         st.markdown('<div class="warning-alert"><b>💡 空缺提示：</b><br>' + '<br>'.join(audit_results["vacuum"][1]) + '</div>', unsafe_allow_html=True)
 
-    # ==================== 排班表預覽 + 手動修改 ====================
+    # ==================== 值班表預覽 + 手動修改 ====================
     st.write("---")
     st.subheader("📅 本週值班表")
     tab_view, tab_edit = st.tabs(["📅 視覺公告版（彩色）", "✏️ 手動修改版"])
@@ -133,9 +111,23 @@ def main():
             st.session_state.roster_df = edited_roster
             st.rerun()
 
+    # ==================== 手動調整負荷功能（新功能） ====================
+    st.write("---")
+    st.subheader("🔧 手動調整本次值班負荷指數")
+    st.caption("針對每個崗位本次值班，手動修改累計負荷點數（調整後會即時更新最終總計）")
+
+    manual_col = st.data_editor(
+        st.session_state.manual_weights,
+        use_container_width=True,
+        key="manual_weight_editor"
+    )
+    if not manual_col.equals(st.session_state.manual_weights):
+        st.session_state.manual_weights = manual_col
+        st.rerun()
+
     # ==================== 累計動態工作負荷審計表 ====================
     st.write("---")
-    st.subheader("📊 累計動態工作負荷審計表")
+    st.subheader("📊 累計動態工作負荷審計表（已包含手動調整）")
     if not st.session_state.master_report_df.empty:
         st.dataframe(st.session_state.master_report_df, use_container_width=True, hide_index=True)
     else:
@@ -161,9 +153,7 @@ def main():
     col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("📄 匯出 A4 橫式公告 PDF", use_container_width=True):
-            logo_b64 = None
-            if st.session_state.get("show_logo_toggle", True) and st.session_state.get("logo_data"):
-                logo_b64 = base64.b64encode(st.session_state.logo_data).decode()
+            logo_b64 = base64.b64encode(st.session_state.logo_data).decode() if st.session_state.get("logo_data") else None
             pdf_bytes = generate_pdf(st.session_state.roster_df, st.session_state.master_report_df, logo_b64)
             if pdf_bytes:
                 st.download_button("💾 下載 PDF", pdf_bytes, f"SYSS_Roster_{datetime.date.today().strftime('%Y%m%d')}.pdf", "application/pdf", use_container_width=True)
