@@ -1,14 +1,13 @@
 # core.py
-import streamlit as st
 import pandas as pd
 import random
+
 from config import DAYS, ROWS_ROSTER, WEIGHTS
 
 # ==========================================
-# 核心排班演算法（完整無省略）
+# 1. 核心排班演算法（完整版）
 # ==========================================
 def generate_roster(students_df: pd.DataFrame, leave_students: list, special_closures: list, seed: int) -> pd.DataFrame:
-    """生成公平值班表 - 完整版"""
     if students_df.empty or students_df['name'].str.strip().eq('').all():
         st.error("⚠️ 學生名冊為空，請先在側邊欄新增或導入資料！")
         return pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
@@ -16,14 +15,14 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
     rng = random.Random(seed)
     new_roster = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
 
-    # 1. 保留手動標記的 "X"
+    # 保留手動標記的 "X"
     for r in ROWS_ROSTER:
         for d in DAYS:
             if r in st.session_state.roster_df.index and d in st.session_state.roster_df.columns:
                 if str(st.session_state.roster_df.at[r, d]).strip().upper() == "X":
                     new_roster.at[r, d] = "X"
 
-    # 2. 處理特殊不開放時段
+    # 特殊不開放時段
     for item in special_closures:
         try:
             day_part, room_part = item.split(" - ")
@@ -33,14 +32,13 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
         except ValueError:
             continue
 
-    # 3. 處理固定總值班
+    # 固定總值班處理
     for _, s in students_df.iterrows():
         name = str(s.get('name', '')).strip()
         fixed_day = str(s.get('fixed_general_duty', '')).strip().upper()
         if name and fixed_day in DAYS and new_roster.at['Assist. in charge (General Duty)', fixed_day] != "X":
             new_roster.at['Assist. in charge (General Duty)', fixed_day] = name
 
-    # 4. 準備學生資料快取
     students = students_df.to_dict('records')
     current_week_weights = {}
     student_form_map = {}
@@ -58,13 +56,12 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
 
     last_duty_day = {name: -2 for name in current_week_weights}
 
-    # 5. 逐日排班
     for d_idx, day in enumerate(DAYS):
         assigned_today = set()
         fixed_pic = str(new_roster.at['Assist. in charge (General Duty)', day]).strip()
         if fixed_pic and fixed_pic not in ["", "X"]:
             assigned_today.add(fixed_pic)
-
+        
         dynamic_roles = [r for r in ROWS_ROSTER if r != 'Assist. in charge (General Duty)']
         rng.shuffle(dynamic_roles)
         dynamic_roles.sort(key=lambda x: 1 if "- 2" in x else 0)
@@ -72,6 +69,7 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
         for role in dynamic_roles:
             if new_roster.at[role, day] == "X":
                 continue
+
             if 'Room202' in role and day in ['TUESDAY', 'FRIDAY']:
                 new_roster.at[role, day] = ""
                 continue
@@ -90,7 +88,7 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
                     continue
                 if day not in student_avail_cache.get(name, set()):
                     continue
-
+                
                 form_str = student_form_map.get(name, "")
                 if partner_is_junior and "3" in form_str:
                     continue
@@ -125,12 +123,10 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
 
     return new_roster
 
-
 # ==========================================
-# 驗證與統計
+# 2. 全局數據審計與雙軌統計大表計算中心（完整版）
 # ==========================================
 def validate_and_compute(roster_df: pd.DataFrame, students_df: pd.DataFrame, leave_students: list):
-    """完整驗證與統計"""
     valid_names = set(str(name).strip() for name in students_df["name"].dropna() if str(name).strip())
     typo_detected = False
     vacuum_detected = False
@@ -207,12 +203,10 @@ def validate_and_compute(roster_df: pd.DataFrame, students_df: pd.DataFrame, lea
         "report_df": pd.DataFrame(final_records)
     }
 
-
 # ==========================================
-# 智慧替補推薦
+# 3. 智慧替補推薦系統（完整版）
 # ==========================================
 def recommend_substitutes(roster_df, students_df, chosen_day, chosen_role):
-    """智慧替補推薦系統"""
     current_person = str(roster_df.at[chosen_role, chosen_day]).strip()
     if current_person in ["", "X"]:
         return None, "該時段無需替補、為常規關閉或目前不開放。"
