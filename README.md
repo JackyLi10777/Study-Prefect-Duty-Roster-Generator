@@ -1,90 +1,79 @@
-# 🦅 Sing Yin Secondary School Study Prefect Duty Roster System
+# Sing Yin Secondary School Study Prefect Duty Roster
 
-**版本**：v1.3 模組化 + AI 智能解析版  
-**最新更新**：2026 年 5 月 25 日  
-**適用對象**：Study Prefect Team Advisor、Head Study Prefect、Assistant Head Study Prefect
-
-這是一個專為 **Sing Yin Secondary School** 設計的 **Study Prefect 值班表生成平台**，完全符合學校男校 F.3–F.5 領袖生排班規則。
+**Sing Yin Secondary School Study Prefect 值班排班系統**  
+一套專為 Sing Yin Secondary School Study Prefect Team 設計的智能排班管理平台。
 
 ---
 
 ## ✨ 主要功能
 
-- **智能公平排班演算法**：自動考慮歷史負荷、可用日子、職級、老帶新、固定總值班、連續值班限制
-- **AI 智能解析 Remarks**：自動理解「固定週一」「可用三五」「隊長」「老帶新」等中文描述，自動更新欄位
-- **每日聖經金句**：每天自動顯示一句鼓勵經文（50+ 句，可自行擴充）
-- **彩色 PDF 公告版**：一鍵導出 A4 橫式彩色班表（含校徽）
-- **多格式導出**：Excel、Markdown、JSON 完整備份
-- **智慧替補推薦**：突發請假時即時推薦最優替補
-- **雙軌編輯介面**：視覺公告版 + 互動式手動修改版
-- **Cloud 備份還原**：解決 Streamlit Cloud 休眠重置問題
-- **完全模組化架構**：易維護、易擴充
+- **智能公平排班**：自動考慮歷史負荷、可用日子、老帶新機制（F.3 由 F.4/F.5 帶）、固定總值班、職級限制
+- **DeepSeek V4 AI 智能解析**：自動理解中文備註，智能更新固定值班、可用日子、職級
+- **手動調整負荷**：可針對每個崗位本次值班手動修改累計負荷點數，即時更新最終總計
+- **智慧替補推薦**：請假時自動推薦最合適替補人員（按總負荷由低到高排序）
+- **彩色 PDF 公告班表**：支援校徽顯示，適合列印公告
+- **多格式導出**：Excel、Markdown、PDF
+- **Cloud 備份 / 還原**：解決 Streamlit Cloud 休眠重置問題
+- **每日聖經金句** + 校徽顯示開關
+- **完整使用說明書** + 直接反饋功能
 
 ---
 
-## 📁 專案檔案結構
-study-prefect-duty-roster/
-├── app.py                    # 主程式入口（唯一執行檔案）
-├── config.py                 # 常數、每日金句、WEIGHTS
-├── utils.py                  # PDF、備份、導入工具
-├── data.py                   # 示範名冊、欄位映射
-├── core.py                   # 排班演算法、驗證、替補
-├── ui_components.py          # 所有 UI 元件（含 AI 按鈕）
-├── ai_parser.py              # AI 智能解析 Remarks
-├── requirements.txt          # Python 套件清單
-├── packages.txt              # Streamlit Cloud 系統套件（PDF 用）
-├── .streamlit/config.toml    # Streamlit 主題與伺服器設定
-└── README.md                 # 本說明文件
+## 📁 專案結構
+Study-Prefect-Duty-Roster-Generator/
+├── app.py                     # 主程式入口
+├── ui_components.py           # 側邊欄與控制元件
+├── core.py                    # 排班演算法與驗證
+├── ai_parser.py               # DeepSeek V4 AI 解析
+├── utils.py                   # PDF、備份、導入等工具
+├── data.py                    # 示範資料與格式範例
+├── config.py                  # 常數與設定
+├── .streamlit/
+│   └── secrets.toml           # API 金鑰（請勿上傳 GitHub）
+├── requirements.txt
+├── packages.txt               # WeasyPrint 系統依賴
+├── logo.png                   # 預設校徽（請自行上傳）
+└── README.md
 text---
 
-## 🚀 部署到 Streamlit Cloud（最簡單方式）
+## 🚀 如何部署到 Streamlit Cloud
 
-1. 把以上所有檔案上傳到 GitHub 倉庫
-2. 進入 [Streamlit Cloud](https://share.streamlit.io) → New app
-3. Repository 選你的倉庫
-4. Branch 選 `main`
-5. Main file path 填 `app.py`
-6. 點擊 **Deploy**
+1. Fork 或 Clone 本專案到您的 GitHub
+2. 在專案根目錄建立 `.streamlit/secrets.toml` 並加入以下內容：
 
-**重要**：第一次部署可能需要 1–2 分鐘讓 Cloud 安裝 WeasyPrint 依賴，之後就會非常快。
+```toml
+DEEPSEEK_API_KEY = "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
----
+確保根目錄有 logo.png（校徽）
+在 Streamlit Cloud 建立新 App，連結您的 GitHub 倉庫即可自動部署
 
-## 🤖 如何使用 AI 智能解析 Remarks
 
-1. 在側邊欄「👥 在線名冊即時維護」區塊
-2. 填寫或修改任何同學的 **Remarks** 欄位（例如：「固定週一」「可用三五」「隊長」「老帶新」）
-3. 點擊 **🚀 執行 AI 智能解析 Remarks** 按鈕
-4. AI 會自動更新：
-   - `fixed_general_duty`
-   - `available`
-   - `role`
-   - 並在 remarks 加上標記
+🔑 如何取得 DeepSeek API Key
 
----
+前往 https://platform.deepseek.com/
+使用 GitHub 或 Google 帳號登入
+左側點擊 API Key → 建立新 Key
+複製 Key 貼到 secrets.toml
 
-## 🔧 自訂設定
 
-### 增加每日聖經金句
-編輯 `config.py` 中的 `DAILY_VERSES` 字典即可（key 為星期 0–6）。
+📋 使用說明
+詳細使用說明請在程式內點擊「📖 查看完整使用說明書」。
+主要操作流程：
 
-### 修改排班權重
-在 `config.py` 的 `WEIGHTS` 字典調整即可。
+側邊欄載入或編輯名冊
+點擊 AI 智能解析 Remarks（強烈建議）
+主畫面設定特殊不開放時段 → 生成排班
+使用 手動調整負荷 微調
+導出 PDF / Excel / 備份
 
-### 新增 AI 解析規則
-在 `ai_parser.py` 的 `ai_parse_remarks` 函數中新增關鍵字即可。
 
----
+📧 聯絡與反饋
+有任何問題、建議或需要客製化功能，請直接寄信給開發者：
+Email： s10777@syss.edu.hk
 
-## 📬 技術支援
+感謝使用 Sing Yin Study Prefect Duty Roster！
+祝 Study Prefect Team 服務順利、公平公正！
 
-- **開發者**：LI CHuangjie, Jacky
-- **版本控制**：本專案已完全模組化，方便未來維護
-- **問題回報**：請在 GitHub Issues 提出
-
----
-
-**感謝使用 Sing Yin Study Prefect Duty Roster System！**  
-願每一位領袖生在服事中都經歷神的恩典與力量。
-
-**「你們要先求他的國和他的義，這些東西都要加給你們了。」——馬太福音 6:33**
+開發者：Jacky Li
+版本：v1.4（2026.05.25）
+技術：Streamlit + DeepSeek V4 + WeasyPrint + Pandas
