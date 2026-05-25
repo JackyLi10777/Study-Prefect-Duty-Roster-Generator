@@ -8,6 +8,11 @@ import base64
 import google.generativeai as genai
 
 # ==========================================
+# 從 config 引入必要常數
+# ==========================================
+from config import DAYS, ROWS_ROSTER
+
+# ==========================================
 # 0. PDF 支援強固檢查
 # ==========================================
 try:
@@ -75,7 +80,6 @@ def process_roster_import(uploaded_file):
 # AI 智能名冊導入（任意格式自動匹配）
 # ==========================================
 def smart_process_roster_import(uploaded_file):
-    """AI 自動識別任意欄位名稱與順序，只要內容有對應關鍵資訊即可"""
     try:
         if uploaded_file.name.endswith('.csv'):
             df = pd.read_csv(uploaded_file)
