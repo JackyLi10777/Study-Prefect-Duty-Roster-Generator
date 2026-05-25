@@ -3,7 +3,7 @@ import pandas as pd
 import io
 
 # ==========================================
-# 1. Sing Yin 官方示範名冊（7位學生，完整版）
+# 官方示範名冊資料（Sing Yin Secondary School 真實風格）
 # ==========================================
 DEMO_DATA = [
     {
@@ -15,7 +15,7 @@ DEMO_DATA = [
         "available": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY",
         "history_duties": 12,
         "history_weight": 12.0,
-        "remarks": "固定週一總值班 / 隊長"
+        "remarks": "固定週一總值班，隊長"
     },
     {
         "name": "李浩然",
@@ -37,7 +37,7 @@ DEMO_DATA = [
         "available": "MONDAY,WEDNESDAY,THURSDAY,FRIDAY",
         "history_duties": 9,
         "history_weight": 13.5,
-        "remarks": ""
+        "remarks": "老帶新優先"
     },
     {
         "name": "黃子軒",
@@ -48,7 +48,7 @@ DEMO_DATA = [
         "available": "TUESDAY,WEDNESDAY,FRIDAY",
         "history_duties": 8,
         "history_weight": 12.0,
-        "remarks": "老帶新優先"
+        "remarks": ""
     },
     {
         "name": "林俊傑",
@@ -59,7 +59,7 @@ DEMO_DATA = [
         "available": "MONDAY,TUESDAY,THURSDAY",
         "history_duties": 6,
         "history_weight": 9.0,
-        "remarks": "需與高年級配對"
+        "remarks": "需老帶新"
     },
     {
         "name": "王偉倫",
@@ -86,14 +86,11 @@ DEMO_DATA = [
 ]
 
 def get_demo_dataframe():
-    """回傳官方示範名冊 DataFrame"""
+    """返回官方示範名冊 DataFrame"""
     return pd.DataFrame(DEMO_DATA)
 
-# ==========================================
-# 2. 名冊導入格式範例（讓使用者知道正確欄位）
-# ==========================================
 def get_sample_format_dataframe():
-    """回傳名冊導入格式範例（供下載使用）"""
+    """返回名冊導入格式範例（給使用者下載用）"""
     sample_data = [
         {
             "姓名": "陳卓軒",
@@ -104,7 +101,7 @@ def get_sample_format_dataframe():
             "可用日子": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY",
             "歷史累計(次)": 12,
             "歷史動態(點)": 12.0,
-            "備註": "固定週一總值班 / 隊長"
+            "備註": "固定週一總值班，隊長"
         },
         {
             "姓名": "李浩然",
@@ -115,7 +112,7 @@ def get_sample_format_dataframe():
             "可用日子": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY",
             "歷史累計(次)": 10,
             "歷史動態(點)": 10.0,
-            "備註": ""
+            "備註": "固定週三總值班"
         },
         {
             "姓名": "張凱傑",
@@ -126,35 +123,7 @@ def get_sample_format_dataframe():
             "可用日子": "MONDAY,WEDNESDAY,THURSDAY,FRIDAY",
             "歷史累計(次)": 9,
             "歷史動態(點)": 13.5,
-            "備註": ""
+            "備註": "老帶新優先"
         }
     ]
     return pd.DataFrame(sample_data)
-
-# ==========================================
-# 3. 欄位對應表（供導入時使用）
-# ==========================================
-COLUMN_MAPPING = {
-    '姓名': 'name',
-    'name': 'name',
-    '學生姓名': 'name',
-    'Prefect Name': 'name',
-    '年級': 'form',
-    'form': 'form',
-    '班別': 'class',
-    'class': 'class',
-    '職級': 'role',
-    'role': 'role',
-    '學年固定總值班': 'fixed_general_duty',
-    'fixed_general_duty': 'fixed_general_duty',
-    '可用日子': 'available',
-    'available': 'available',
-    '歷史累計(次)': 'history_duties',
-    'history_duties': 'history_duties',
-    '歷史動態(點)': 'history_weight',
-    'history_weight': 'history_weight',
-    '備註': 'remarks',
-    'remarks': 'remarks'
-}
-
-print("✅ data.py 載入完成 | 示範名冊與格式範例已準備就緒")
