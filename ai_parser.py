@@ -8,21 +8,27 @@ import google.generativeai as genai
 # ==========================================
 # Google Gemini 3.5 Flash 配置（2026 年 5 月最新版）
 # ==========================================
-if "GEMINI_API_KEY" not in st.secrets:
-    st.error("❌ 未找到 GEMINI_API_KEY，請在 .streamlit/secrets.toml 中新增 GEMINI_API_KEY")
-    genai.configure(api_key=None)
-else:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+GEMINI_API_KEY = None
+model = None
 
-model = genai.GenerativeModel(
-    model_name="gemini-3.5-flash",   # 2026 年 5 月最新穩定版
-    generation_config={
-        "temperature": 0.3,
-        "top_p": 0.95,
-        "top_k": 40,
-        "max_output_tokens": 2048,
-    }
-)
+if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
+    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel(
+            model_name="gemini-3.5-flash",
+            generation_config={
+                "temperature": 0.3,
+                "top_p": 0.95,
+                "top_k": 40,
+                "max_output_tokens": 2048,
+            }
+        )
+        st.success("✅ Gemini API 初始化成功", icon="🔥")
+    except Exception as e:
+        st.error(f"Gemini 初始化失敗: {str(e)}")
+else:
+    st.warning("⚠️ 未設定 GEMINI_API_KEY，請在 .streamlit/secrets.toml 中新增 GEMINI_API_KEY")
 
 SYSTEM_PROMPT = """
 你是一位 Sing Yin Secondary School Study Prefect Team 的資深管理員。
@@ -49,8 +55,8 @@ def ai_parse_remarks(students_df: pd.DataFrame) -> pd.DataFrame:
         st.warning("名冊為空，無法進行 AI 解析")
         return students_df
 
-    if not genai.configure or "GEMINI_API_KEY" not in st.secrets:
-        st.error("Gemini API 未正確配置，請檢查 secrets.toml")
+    if model is None:
+        st.error("❌ Gemini API 未正確初始化，請檢查 secrets.toml 中的 GEMINI_API_KEY")
         return students_df
 
     df = students_df.copy()
