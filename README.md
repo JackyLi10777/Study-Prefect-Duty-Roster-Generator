@@ -1,79 +1,118 @@
 # Sing Yin Study Prefect Duty Roster System
 
-**版本**：v2.0  
-**最後更新**：2026 年 5 月 25 日
+**Sing Yin Secondary School Study Prefect Team 專用值班排班平台**
 
-一個專為 **Sing Yin Secondary School Study Prefect Team** 設計的智能值班排班管理平台。
-
----
-
-## ✨ 主要功能
-
-- ✅ **智能公平排班**：自動考慮歷史負荷、可用日子、老帶新（F.3 由 F.4/F.5 帶）、固定總值班
-- ✅ **DeepSeek / Gemini AI 智能解析 Remarks**：自動理解中文備註並更新欄位
-- ✅ **手動調整負荷**：可針對每次值班手動修改累計負荷點數
-- ✅ **智慧替補推薦**：請假時自動推薦最適合人員
-- ✅ **彩色 PDF 公告班表**（支援 GitHub 預設校徽 + 顯示開關）
-- ✅ **Cloud 完整備份 / 還原**（解決 Streamlit Cloud 休眠重置問題）
-- ✅ **每日聖經金句** + **一鍵刷新金句**功能
-- ✅ **名冊即時編輯** + **多格式導出**（PDF、Excel、Markdown）
-- ✅ **老帶新機制**：自動根據名冊年級判斷
+![Version](https://img.shields.io/badge/Version-v2.0-blue)
+![Python](https://img.shields.io/badge/Python-3.12+-blue)
+![Streamlit](https://img.shields.io/badge/Streamlit-1.38+-blue)
+![License](https://img.shields.io/badge/License-MIT-green)
 
 ---
 
-## 📂 專案檔案結構
+### ✨ 最新功能（v2.0）
+
+- **🤖 AI 智能名冊導入**：支援**任意格式**的 Excel / CSV，無需固定欄位名稱，AI 自動匹配姓名、年級、職級、可用日子等
+- **每日聖經金句**（可刷新）
+- **公平排班演算法**（老帶新機制 + 固定值班 + 避免連續值班 + 歷史負荷平衡）
+- **手動調整本次值班負荷指數**
+- **智慧替補推薦系統**
+- **一鍵清空本週排班** + 確認機制
+- **彩色 PDF 公告班表**（含校徽）
+- **Excel + Markdown 多格式導出**
+- **Cloud 備份 / 還原系統**（解決 Streamlit Cloud 休眠問題）
+- **名冊即時修改**（data_editor）
+- **完整驗證系統**（姓名錯誤、重複、請假衝突、空缺提示）
+
+---
+
+### 📂 專案結構
+
+```
 Study-Prefect-Duty-Roster-Generator/
-├── app.py
-├── config.py
-├── core.py
-├── utils.py
-├── ui_components.py
-├── data.py
-├── ai_parser.py
+├── app.py                  # 主程式入口
+├── config.py               # 常數與金句
+├── core.py                 # 排班演算法核心
+├── utils.py                # PDF、備份、AI智能導入
+├── ui_components.py        # 側邊欄與 UI 元件
+├── data.py                 # 示範資料
+├── ai_parser.py            # Remarks AI 解析
+├── .streamlit/
+│   └── secrets.toml        # Gemini API 金鑰
 ├── requirements.txt
 ├── packages.txt
-├── .streamlit/
-│   └── secrets.toml          # ← 存放 API Key
-├── logo.png                  # ← 校徽（放在根目錄）
-├── README.md
-└── .gitignore
-text---
-
-## 🚀 部署方式（Streamlit Cloud）
-
-1. Fork 或 Clone 本專案到 GitHub
-2. 前往 [Streamlit Cloud](https://share.streamlit.io/) 建立新 App
-3. 填入 Repository URL 並部署
-4. 在 **Advanced settings** 中設定 **Secrets**（見下方）
+├── logo.png                # 校徽（放在根目錄）
+└── README.md
+```
 
 ---
 
-## 🔑 API 金鑰設定
+### 🚀 快速部署（Streamlit Cloud）
 
-在 `.streamlit/secrets.toml` 中加入以下內容：
+1. Fork 此專案
+2. 在 GitHub 根目錄新增 `logo.png`（校徽）
+3. 建立 `.streamlit/secrets.toml`：
+   ```toml
+   GEMINI_API_KEY = "your-gemini-api-key-here"
+   ```
+4. 在 Streamlit Cloud 連結您的 GitHub 儲存庫
+5. 在 **Advanced settings** 中設定：
+   - Python version: **3.12**
+   - requirements.txt
+   - packages.txt（內含 weasyprint 相關套件）
 
-```toml
-# Gemini API（目前使用）
-GEMINI_API_KEY = "AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+---
 
-# 或者使用 Groq（可替換）
-# GROQ_API_KEY = "gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+### 📋 使用說明
 
-🖼️ 校徽設定
+#### 1. 名冊導入（最推薦使用 AI 智能導入）
+- 上傳您的 Prefect 名冊（Excel / CSV）
+- 點擊 **「🤖 AI 智能自動匹配」**（支援任意欄位名稱）
+- 或使用傳統「📋 傳統格式導入」
 
-將校徽圖片重新命名為 logo.png
-放到專案根目錄
-部署後，側邊欄即可看到「🖼️ 顯示校徽」開關
+#### 2. 每日金句
+- 主畫面會顯示每日聖經金句
+- 可點擊「🔄 刷新金句」隨時更換
 
+#### 3. 生成值班表
+- 在側邊欄設定請假人員與特殊不開放時段
+- 點擊主畫面「🚀 智能計算：生成本週全新公平值班表」
 
-📖 使用說明
-詳細使用說明已在程式內建，請開啟網站後點擊「📖 查看完整使用說明書」。
+#### 4. 手動調整
+- 可在「🔧 手動調整本次值班負荷指數」直接修改每個崗位的點數
+- 系統會即時更新累計負荷與公平性圖表
 
-📧 聯絡開發者
-如有任何問題、建議或需要客製化功能，歡迎直接聯絡：
-Email：s10777@syss.edu.hk
+#### 5. 匯出
+- **PDF**：公告用彩色班表（含校徽）
+- **Excel**：完整值班表 + 工作負荷統計
+- **Markdown**：方便複製到文件
 
-📄 License
-本專案為 Sing Yin Secondary School Study Prefect Team 內部使用工具。
+---
 
-Made with ❤️ for Sing Yin Prefects
+### 🔑 API 金鑰設定
+
+- **Gemini API Key**（必填）：用於 AI 智能名冊導入與 Remarks 解析
+- 取得方式：前往 [Google AI Studio](https://aistudio.google.com/app/apikey) 建立免費 API Key
+
+---
+
+### 📸 主要功能截圖
+
+（請自行上傳截圖到 GitHub）
+
+- 主畫面（集中常用功能）
+- AI 智能名冊導入
+- 值班表視覺版 + 手動修改版
+- 累計工作負荷公平性監控圖表
+
+---
+
+### 📬 聯絡與反饋
+
+**顧問 / Head Study Prefect / Assistant Head Study Prefect**  
+如有任何問題或功能建議，請寄信至：**s10777@syss.edu.hk**
+
+---
+
+**Made with ❤️ for Sing Yin Secondary School Study Prefect Team**
+
+最後更新：2026 年 5 月
