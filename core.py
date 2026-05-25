@@ -1,12 +1,13 @@
 # core.py
 import pandas as pd
 import random
+import streamlit as st   # ← 必須加上這一行，否則會 NameError
 
 from config import DAYS, ROWS_ROSTER, WEIGHTS
 
 def generate_roster(students_df: pd.DataFrame, leave_students: list, special_closures: list, seed: int) -> pd.DataFrame:
     if students_df.empty or students_df['name'].str.strip().eq('').all():
-        # 改為返回空表格，不在 core.py 呼叫 st.error（避免 NameError）
+        st.error("⚠️ 學生名冊為空，請先在側邊欄新增或導入資料！")
         return pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
 
     rng = random.Random(seed)
