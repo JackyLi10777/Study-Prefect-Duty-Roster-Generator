@@ -1,78 +1,109 @@
 # ai_parser.py
 import pandas as pd
-from config import DAYS
+import re
 
-def ai_parse_remarks(students_df: pd.DataFrame):
+# ==========================================
+# 1. 星期對應表（中文關鍵字 → 英文代碼）
+# ==========================================
+DAY_MAP = {
+    "週一": "MONDAY",
+    "星期一": "MONDAY",
+    "周一": "MONDAY",
+    "一": "MONDAY",
+    "週二": "TUESDAY",
+    "星期二": "TUESDAY",
+    "周二": "TUESDAY",
+    "二": "TUESDAY",
+    "週三": "WEDNESDAY",
+    "星期三": "WEDNESDAY",
+    "周三": "WEDNESDAY",
+    "三": "WEDNESDAY",
+    "週四": "THURSDAY",
+    "星期四": "THURSDAY",
+    "周四": "THURSDAY",
+    "四": "THURSDAY",
+    "週五": "FRIDAY",
+    "星期五": "FRIDAY",
+    "周五": "FRIDAY",
+    "五": "FRIDAY",
+}
+
+# ==========================================
+# 2. AI 智能解析 Remarks 主函數（完整版）
+# ==========================================
+def ai_parse_remarks(df: pd.DataFrame) -> pd.DataFrame:
     """
-    AI 智能解析 remarks 欄位，並自動更新對應欄位
-    - 支援中文自然語言描述
-    - 完全本地運行，零成本
-    - 返回更新後的 DataFrame
+    根據「備註」欄位中的中文描述，自動更新：
+    - fixed_general_duty
+    - available
+    - role（如果提到隊長/副隊長）
     """
-    if students_df.empty:
-        return students_df
+    if df.empty or "remarks" not in df.columns:
+        return df
 
-    df = students_df.copy()
-    updated_count = 0
-
+    df = df.copy()
     for idx, row in df.iterrows():
-        remarks = str(row.get('remarks', '')).strip()
-        if not remarks or remarks.lower() == 'nan':
+        remarks = str(row.get("remarks", "")).strip()
+        if not remarks:
             continue
 
-        remarks_lower = remarks.lower()
+        remarks_upper = remarks.upper()
+        name = str(row.get("name", "")).strip()
 
-        changed = False
-
-        # 1. 固定總值班偵測（最常用）
-        day_map = {
-            '週一': 'MONDAY', 'monday': 'MONDAY', '一': 'MONDAY',
-            '週二': 'TUESDAY', 'tuesday': 'TUESDAY', '二': 'TUESDAY',
-            '週三': 'WEDNESDAY', 'wednesday': 'WEDNESDAY', '三': 'WEDNESDAY',
-            '週四': 'THURSDAY', 'thursday': 'THURSDAY', '四': 'THURSDAY',
-            '週五': 'FRIDAY', 'friday': 'FRIDAY', '五': 'FRIDAY'
-        }
-        for keyword, day_code in day_map.items():
-            if (keyword in remarks_lower or day_code.lower() in remarks_lower) and any(x in remarks_lower for x in ['固定', '總值班', '固定值班']):
-                df.at[idx, 'fixed_general_duty'] = day_code
-                changed = True
+        # 1. 固定總值班解析
+        fixed_day = None
+        for cn, en in DAY_MAP.items():
+            if cn in remarks:
+                fixed_day = en
                 break
+        if fixed_day:
+            df.at[idx, "fixed_general_duty"] = fixed_day
 
-        # 2. 可用日子偵測
-        if any(x in remarks_lower for x in ['可用', '可值班', '優先', '能值班']):
-            detected_days = []
-            for day in DAYS:
-                if day.lower() in remarks_lower or day.lower()[:3] in remarks_lower or day.lower()[:1] in remarks_lower:
-                    detected_days.append(day)
-            if detected_days:
-                df.at[idx, 'available'] = ','.join(detected_days)
-                changed = True
+        # 2. 可用日子解析（如果提到「只可」或「可用」）
+        available_days = []
+        for cn, en in DAY_MAP.items():
+            if cn in remarks:
+                available_days.append(en)
+        if available_days:
+            # 如果有明確提到可用日子，就覆蓋
+            df.at[idx, "available"] = ",".join(available_days)
+        elif "全週" in remarks or "每天" in remarks or "全部" in remarks:
+            df.at[idx, "available"] = "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY"
 
-        # 3. 職級偵測（隊長 / AHP）
-        if any(x in remarks_lower for x in ['隊長', 'assistant head', 'ahp', '副隊長', 'assistant']):
-            if df.at[idx, 'role'] != "Assistant Head Study Prefect":
-                df.at[idx, 'role'] = "Assistant Head Study Prefect"
-                changed = True
+        # 3. 職級解析（隊長、副隊長）
+        if any(keyword in remarks_upper for keyword in ["隊長", "HEAD", "CAPTAIN", "總隊長"]):
+            df.at[idx, "role"] = "Assistant Head Study Prefect"
+        elif any(keyword in remarks_upper for keyword in ["副隊長", "ASSISTANT HEAD"]):
+            df.at[idx, "role"] = "Assistant Head Study Prefect"
 
-        # 4. 老帶新優先標記（未來可擴充優先邏輯）
-        if any(x in remarks_lower for x in ['老帶新', '帶新', '新手', '指導']):
-            # 目前先在 remarks 加上標記，後續可在 generate_roster 中加強優先
-            current_remarks = str(df.at[idx, 'remarks'])
-            if '老帶新優先' not in current_remarks:
-                df.at[idx, 'remarks'] = current_remarks + " [老帶新優先]"
-                changed = True
-
-        # 5. 請假偵測（僅記錄提示）
-        if any(x in remarks_lower for x in ['請假', '休假', '不在', '缺席']):
-            # 這裡僅在 console 提示，實際請假仍由側邊欄多選處理
-            print(f"🔍 AI 偵測到請假提示：{row.get('name')} - {remarks}")
-
-        if changed:
-            updated_count += 1
-
-    if updated_count > 0:
-        print(f"✅ AI 智能解析完成！共更新 {updated_count} 位同學的欄位")
-    else:
-        print("ℹ️  沒有偵測到需要更新的 remarks 內容")
+        # 4. 老帶新標記（F.3 學生）
+        if "老帶新" in remarks or "帶新" in remarks or "F3" in remarks_upper or "中三" in remarks:
+            if pd.isna(df.at[idx, "available"]) or df.at[idx, "available"] == "":
+                df.at[idx, "available"] = "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY"
 
     return df
+
+# ==========================================
+# 3. 測試用示範函數（開發時可呼叫）
+# ==========================================
+def test_ai_parser():
+    test_df = pd.DataFrame({
+        "name": ["陳卓軒", "李浩然", "張凱傑"],
+        "form": ["F.5", "F.5", "F.4"],
+        "role": ["Study Prefect", "Study Prefect", "Study Prefect"],
+        "fixed_general_duty": ["NONE", "NONE", "NONE"],
+        "available": ["", "", ""],
+        "history_duties": [12, 10, 9],
+        "history_weight": [12.0, 10.0, 13.5],
+        "remarks": [
+            "固定週一總值班 / 隊長",
+            "只可週三和週五",
+            "老帶新 / 中三學生優先配對"
+        ]
+    })
+    updated = ai_parse_remarks(test_df)
+    print("✅ AI 解析測試結果：")
+    print(updated[["name", "fixed_general_duty", "available", "role", "remarks"]])
+    return updated
+
+print("✅ ai_parser.py 載入完成 | AI 智能解析 Remarks 功能已就緒")
