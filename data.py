@@ -1,8 +1,9 @@
 # data.py
 import pandas as pd
+import io
 
 # ==========================================
-# 示範數據（Sing Yin 官方示範名冊）
+# 1. Sing Yin 官方示範名冊（7位學生，完整版）
 # ==========================================
 DEMO_DATA = [
     {
@@ -14,7 +15,7 @@ DEMO_DATA = [
         "available": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY",
         "history_duties": 12,
         "history_weight": 12.0,
-        "remarks": "隊長 / 固定週一總值班"
+        "remarks": "固定週一總值班 / 隊長"
     },
     {
         "name": "李浩然",
@@ -36,7 +37,7 @@ DEMO_DATA = [
         "available": "MONDAY,WEDNESDAY,THURSDAY,FRIDAY",
         "history_duties": 9,
         "history_weight": 13.5,
-        "remarks": "老帶新優先"
+        "remarks": ""
     },
     {
         "name": "黃子軒",
@@ -47,7 +48,7 @@ DEMO_DATA = [
         "available": "TUESDAY,WEDNESDAY,FRIDAY",
         "history_duties": 8,
         "history_weight": 12.0,
-        "remarks": ""
+        "remarks": "老帶新優先"
     },
     {
         "name": "林俊傑",
@@ -58,7 +59,7 @@ DEMO_DATA = [
         "available": "MONDAY,TUESDAY,THURSDAY",
         "history_duties": 6,
         "history_weight": 9.0,
-        "remarks": "需老帶新"
+        "remarks": "需與高年級配對"
     },
     {
         "name": "王偉倫",
@@ -84,88 +85,76 @@ DEMO_DATA = [
     }
 ]
 
-# ==========================================
-# 欄位映射字典（支援多種 Excel / CSV 格式）
-# ==========================================
-COLUMN_MAPPING = {
-    # 姓名相關
-    '姓名': 'name',
-    'name': 'name',
-    'Prefect Name': 'name',
-    '學生姓名': 'name',
-    '學生': 'name',
-    
-    # 年級
-    '年級': 'form',
-    'form': 'form',
-    'Form': 'form',
-    'Grade': 'form',
-    
-    # 班別
-    '班別': 'class',
-    'class': 'class',
-    'Class': 'class',
-    
-    # 職級
-    '職級': 'role',
-    'role': 'role',
-    'Role': 'role',
-    
-    # 固定值班
-    '學年固定總值班': 'fixed_general_duty',
-    'fixed_general_duty': 'fixed_general_duty',
-    '固定值班': 'fixed_general_duty',
-    
-    # 可用日子
-    '可用日子': 'available',
-    'available': 'available',
-    '可用天數': 'available',
-    
-    # 歷史數據
-    '歷史累計(次)': 'history_duties',
-    'history_duties': 'history_duties',
-    '歷史次數': 'history_duties',
-    
-    '歷史動態(點)': 'history_weight',
-    'history_weight': 'history_weight',
-    '歷史點數': 'history_weight',
-    '歷史累積': 'history_weight',
-    
-    # 備註
-    '備註': 'remarks',
-    'remarks': 'remarks',
-    'Remark': 'remarks'
-}
-
-# ==========================================
-# 示範名冊 DataFrame 快速生成函數
-# ==========================================
 def get_demo_dataframe():
-    """返回示範名冊 DataFrame"""
+    """回傳官方示範名冊 DataFrame"""
     return pd.DataFrame(DEMO_DATA)
 
 # ==========================================
-# 格式範例 DataFrame（用於下載範例檔）
+# 2. 名冊導入格式範例（讓使用者知道正確欄位）
 # ==========================================
 def get_sample_format_dataframe():
-    """返回名冊導入格式範例"""
+    """回傳名冊導入格式範例（供下載使用）"""
     sample_data = [
-        {"姓名": "陳卓軒", "年級": "F.5", "班別": "5A", "職級": "Assistant Head Study Prefect", 
-         "學年固定總值班": "MONDAY", "可用日子": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY", 
-         "歷史累計(次)": 12, "歷史動態(點)": 12.0, "備註": "隊長"},
-        {"姓名": "李浩然", "年級": "F.5", "班別": "5B", "職級": "Assistant Head Study Prefect", 
-         "學年固定總值班": "WEDNESDAY", "可用日子": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY", 
-         "歷史累計(次)": 10, "歷史動態(點)": 10.0, "備註": ""},
-        {"姓名": "張凱傑", "年級": "F.4", "班別": "4A", "職級": "Study Prefect", 
-         "學年固定總值班": "NONE", "可用日子": "MONDAY,WEDNESDAY,THURSDAY,FRIDAY", 
-         "歷史累計(次)": 9, "歷史動態(點)": 13.5, "備註": ""},
+        {
+            "姓名": "陳卓軒",
+            "年級": "F.5",
+            "班別": "5A",
+            "職級": "Assistant Head Study Prefect",
+            "學年固定總值班": "MONDAY",
+            "可用日子": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY",
+            "歷史累計(次)": 12,
+            "歷史動態(點)": 12.0,
+            "備註": "固定週一總值班 / 隊長"
+        },
+        {
+            "姓名": "李浩然",
+            "年級": "F.5",
+            "班別": "5B",
+            "職級": "Assistant Head Study Prefect",
+            "學年固定總值班": "WEDNESDAY",
+            "可用日子": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY",
+            "歷史累計(次)": 10,
+            "歷史動態(點)": 10.0,
+            "備註": ""
+        },
+        {
+            "姓名": "張凱傑",
+            "年級": "F.4",
+            "班別": "4A",
+            "職級": "Study Prefect",
+            "學年固定總值班": "NONE",
+            "可用日子": "MONDAY,WEDNESDAY,THURSDAY,FRIDAY",
+            "歷史累計(次)": 9,
+            "歷史動態(點)": 13.5,
+            "備註": ""
+        }
     ]
     return pd.DataFrame(sample_data)
 
 # ==========================================
-# 測試用：檢查模組是否正確載入
+# 3. 欄位對應表（供導入時使用）
 # ==========================================
-if __name__ == "__main__":
-    print("✅ data.py 模組載入成功")
-    print(f"   示範數據筆數：{len(DEMO_DATA)}")
-    print(f"   欄位映射字典大小：{len(COLUMN_MAPPING)}")
+COLUMN_MAPPING = {
+    '姓名': 'name',
+    'name': 'name',
+    '學生姓名': 'name',
+    'Prefect Name': 'name',
+    '年級': 'form',
+    'form': 'form',
+    '班別': 'class',
+    'class': 'class',
+    '職級': 'role',
+    'role': 'role',
+    '學年固定總值班': 'fixed_general_duty',
+    'fixed_general_duty': 'fixed_general_duty',
+    '可用日子': 'available',
+    'available': 'available',
+    '歷史累計(次)': 'history_duties',
+    'history_duties': 'history_duties',
+    '歷史動態(點)': 'history_weight',
+    'history_weight': 'history_weight',
+    '備註': 'remarks',
+    'remarks': 'remarks'
+}
+
+print("✅ data.py 載入完成 | 示範名冊與格式範例已準備就緒")
