@@ -31,10 +31,8 @@ if 'manual_weights' not in st.session_state:
     st.session_state.manual_weights = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)
 
 def main():
-    # 側邊欄只放管理功能
     render_sidebar()
 
-    # 主畫面 - 集中常用功能
     st.markdown(f'<p class="main-title">{APP_TITLE}</p>', unsafe_allow_html=True)
     st.markdown(f'<p class="main-subtitle">F.3–F.5 Study Prefect Duty Platform | {VERSION}</p>', unsafe_allow_html=True)
     
@@ -43,7 +41,6 @@ def main():
     st.write("---")
     selected_closures = render_control_buttons()
 
-    # 驗證與提示
     leave_students = st.session_state.leave_tracker_input
     audit_results = validate_and_compute(st.session_state.roster_df, st.session_state.students_df, leave_students, st.session_state.manual_weights)
     st.session_state.master_report_df = audit_results["report_df"]
@@ -64,7 +61,7 @@ def main():
     elif audit_results["vacuum"][0]:
         st.markdown('<div class="warning-alert"><b>💡 空缺提示：</b><br>' + '<br>'.join(audit_results["vacuum"][1]) + '</div>', unsafe_allow_html=True)
 
-    # 值班表（最常用）
+    # 值班表
     st.write("---")
     st.subheader("📅 本週值班表")
     tab_view, tab_edit = st.tabs(["📅 視覺公告版", "✏️ 手動修改版"])
@@ -99,7 +96,7 @@ def main():
             st.session_state.roster_df = edited_roster
             st.rerun()
 
-    # 手動調整負荷（常用功能）
+    # 手動調整負荷
     st.write("---")
     st.subheader("🔧 手動調整本次值班負荷指數")
     st.caption("針對每個崗位本次值班，手動修改累計負荷點數")
@@ -112,13 +109,13 @@ def main():
         st.session_state.manual_weights = manual_col
         st.rerun()
 
-    # 累計審計表與圖表
+    # 累計審計表
     st.write("---")
     st.subheader("📊 累計動態工作負荷審計表")
     if not st.session_state.master_report_df.empty:
         st.dataframe(st.session_state.master_report_df, use_container_width=True, hide_index=True)
     else:
-        st.info("請先生成排班表以顯示審計表")
+        st.info("請先生成排班表")
 
     if not st.session_state.master_report_df.empty:
         st.write("---")
@@ -133,7 +130,7 @@ def main():
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    # 智慧替補（常用）
+    # 智慧替補
     st.write("---")
     st.subheader("🔍 智慧替補推薦")
     c1, c2 = st.columns(2)
