@@ -31,47 +31,39 @@ if 'manual_weights' not in st.session_state:
     st.session_state.manual_weights = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)
 
 # ==========================================
-# 使用說明書（最完整版 + 直接反饋）
+# 使用說明書（完整版 + 直接反饋）
 # ==========================================
 HELP_TEXT = """
 # 📖 Sing Yin Secondary School Study Prefect Duty Roster 使用說明書  
-**版本**：v1.4 手動調整負荷 + DeepSeek V4 AI 版  
+**版本**：v1.4 手動調整負荷 + DeepSeek V4 版  
 **更新日期**：2026 年 5 月 25 日  
 
 **適用對象**：Study Prefect Team Advisor、Head Study Prefect、Assistant Head Study Prefect
 
----
-
-### 系統主要功能
-1. **智能公平排班**：自動考慮歷史負荷、可用日子、老帶新（F.3 由 F.4/F.5 帶）、固定總值班、職級限制
-2. **老帶新機制**：系統會自動讀取名冊中的「年級」欄位進行判斷（F.3 為 junior）
-3. **AI 智能解析 Remarks**：使用 DeepSeek V4 自動理解中文備註，更新固定值班、可用日子、職級
-4. **手動調整負荷**：可針對每個崗位本次值班手動修改累計負荷點數（即時生效）
-5. **智慧替補推薦**：請假時自動推薦最合適的替補人員
-6. **彩色 PDF 公告班表** + Excel + Markdown 多格式導出
-7. **Cloud 備份 / 還原**：解決 Streamlit Cloud 休眠重置問題
-8. **每日聖經金句** + 校徽顯示開關
-
----
+### 主要功能
+- 智能公平排班（自動讀取年級判斷老帶新）
+- DeepSeek V4 AI 智能解析 Remarks
+- 手動調整每次值班負荷指數
+- 彩色 PDF 公告班表 + Excel + Markdown 導出
+- Cloud 完整備份 / 還原
+- 每日聖經金句 + 校徽顯示開關
 
 ### 操作流程
-1. 側邊欄 → 上傳或載入名冊
-2. 側邊欄 → 點擊「🤖 AI 智能解析 Remarks」（強烈建議）
-3. 主畫面 → 設定特殊不開放時段 → 點擊生成排班
-4. 使用「🔧 手動調整本次值班負荷指數」微調
-5. 導出 PDF / Excel / Markdown / 備份
+1. 側邊欄載入名冊 → AI 解析 Remarks
+2. 主畫面設定不開放時段 → 生成排班
+3. 使用「🔧 手動調整負荷」微調
+4. 導出 PDF / Excel / 備份
 
 ---
 
 ### 📧 直接反饋給開發者
-如果您在使用過程中遇到任何問題、想提出建議，或需要客製化功能，請直接點擊下方按鈕寄信給我：
+遇到問題或有建議，請直接點擊下方按鈕寄信：
 
-[📧 點此直接寄信給開發者](mailto:s10777@syss.edu.hk?subject=Study%20Prefect%20Duty%20Roster%20反饋&body=您好，我是...%0A%0A問題描述：%0A%0A建議：)
+[📧 點此直接寄信給開發者](mailto:s10777@syss.edu.hk?subject=Study Prefect Duty Roster 反饋)
 
 ---
 
-**如有任何問題，歡迎隨時聯絡我！**  
-Sing Yin Secondary School Study Prefect Platform 開發團隊
+如有任何問題，歡迎隨時聯絡我！
 """
 
 def main():
@@ -107,7 +99,7 @@ def main():
     elif audit_results["vacuum"][0]:
         st.markdown('<div class="warning-alert"><b>💡 空缺提示：</b><br>' + '<br>'.join(audit_results["vacuum"][1]) + '</div>', unsafe_allow_html=True)
 
-    # 值班表預覽 + 手動修改
+    # 值班表
     st.write("---")
     st.subheader("📅 本週值班表")
     tab_view, tab_edit = st.tabs(["📅 視覺公告版（彩色）", "✏️ 手動修改版"])
@@ -177,7 +169,7 @@ def main():
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    # PDF + 多格式導出
+    # 導出功能
     st.write("---")
     st.subheader("📤 導出功能")
     col1, col2, col3 = st.columns(3)
