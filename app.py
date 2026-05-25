@@ -13,7 +13,7 @@ from utils import generate_pdf, export_system_backup, import_system_backup, proc
 from ui_components import render_sidebar, show_daily_verse, render_control_buttons
 
 # ==========================================
-# Session State 初始化
+# Session State 初始化（完整版）
 # ==========================================
 if 'students_df' not in st.session_state:
     st.session_state.students_df = pd.DataFrame(columns=["name", "form", "class", "role", "fixed_general_duty", "available", "history_duties", "history_weight", "remarks"])
@@ -31,32 +31,43 @@ if 'manual_weights' not in st.session_state:
     st.session_state.manual_weights = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)
 
 def main():
+    # 側邊欄（管理功能）
     render_sidebar()
 
+    # 主畫面標題
     st.markdown(f'<p class="main-title">{APP_TITLE}</p>', unsafe_allow_html=True)
     st.markdown(f'<p class="main-subtitle">F.3–F.5 Study Prefect Duty Platform | {VERSION}</p>', unsafe_allow_html=True)
     
+    # 每日金句
     show_daily_verse()
 
     st.write("---")
+    # 控制按鈕（生成、清空等）
     selected_closures = render_control_buttons()
 
+    # 驗證與審計
     leave_students = st.session_state.leave_tracker_input
-    audit_results = validate_and_compute(st.session_state.roster_df, st.session_state.students_df, leave_students, st.session_state.manual_weights)
+    audit_results = validate_and_compute(
+        st.session_state.roster_df, 
+        st.session_state.students_df, 
+        leave_students, 
+        st.session_state.manual_weights
+    )
     st.session_state.master_report_df = audit_results["report_df"]
 
+    # 警告提示區
     if audit_results["typo"][0]:
         st.markdown('<div class="danger-alert"><b>⚠️ 數據不符警告：</b><br>' + '<br>'.join(audit_results["typo"][1]) + '</div>', unsafe_allow_html=True)
     if audit_results["duplicate"][0]:
         st.markdown('<div class="danger-alert"><b>⚠️ 重複排班警告：</b><br>' + '<br>'.join(audit_results["duplicate"][1]) + '</div>', unsafe_allow_html=True)
     if audit_results["leave_conflict"][0]:
         st.markdown('<div class="danger-alert"><b>🛑 請假衝突：</b><br>' + '<br>'.join(audit_results["leave_conflict"][1]) + '</div>', unsafe_allow_html=True)
-        if st.button("🩹 一鍵清除請假同學", type="primary"):
+        if st.button("🩹 一鍵清除請假同學", type="primary", use_container_width=True):
             for d in DAYS:
                 for r in ROWS_ROSTER:
                     if str(st.session_state.roster_df.at[r, d]).strip() in leave_students:
                         st.session_state.roster_df.at[r, d] = ""
-            st.success("✅ 已清除")
+            st.success("✅ 已清除請假同學")
             st.rerun()
     elif audit_results["vacuum"][0]:
         st.markdown('<div class="warning-alert"><b>💡 空缺提示：</b><br>' + '<br>'.join(audit_results["vacuum"][1]) + '</div>', unsafe_allow_html=True)
@@ -115,8 +126,9 @@ def main():
     if not st.session_state.master_report_df.empty:
         st.dataframe(st.session_state.master_report_df, use_container_width=True, hide_index=True)
     else:
-        st.info("請先生成排班表")
+        st.info("請先生成排班表以顯示審計表")
 
+    # 公平性圖表
     if not st.session_state.master_report_df.empty:
         st.write("---")
         st.subheader("🦅 全體累積工作點數公平性監控")
