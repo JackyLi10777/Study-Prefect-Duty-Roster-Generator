@@ -1,8 +1,3 @@
-# ==========================================
-# Study Prefect Duty Roster Platform
-# 依賴套件列表
-# ==========================================
-
 streamlit>=1.38.0
 pandas>=2.2.0
 openpyxl>=3.1.0
@@ -16,6 +11,6 @@ cssselect2>=0.7.0
 torch
 transformers
 google-generativeai
-# 可選：開發與除錯工具（建議保留）
+tabulate
 black>=24.0.0
 flake8>=7.0.0
