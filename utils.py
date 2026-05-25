@@ -77,7 +77,6 @@ def import_system_backup(uploaded_json_file):
         data = json.load(uploaded_json_file)
         if "master_report" in data and "roster_table" in data:
             raw_master = pd.DataFrame(data["master_report"])
-            # 還原名冊欄位
             mapping_reverse = {
                 "學生姓名 (Prefect Name)": "name",
                 "年級 (Form)": "form",
@@ -99,7 +98,6 @@ def import_system_backup(uploaded_json_file):
                     else: renamed_df[col] = ""
             st.session_state.students_df = renamed_df[required_cols]
             
-            # 還原值班表
             restored_roster = pd.DataFrame.from_dict(data["roster_table"], orient="index")
             st.session_state.roster_df = restored_roster.reindex(index=ROWS_ROSTER, columns=DAYS).fillna("")
             st.session_state.leave_tracker_input = data.get("leave_tracker", [])
