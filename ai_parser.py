@@ -6,20 +6,19 @@ import time
 from openai import OpenAI
 
 # ==========================================
-# DeepSeek V4 配置（2026 年 5 月最新版本）
+# Groq 配置（2026 年 5 月最新推薦）
 # ==========================================
-if "DEEPSEEK_API_KEY" not in st.secrets:
-    st.error("❌ 未找到 DEEPSEEK_API_KEY，請在 .streamlit/secrets.toml 中新增 DEEPSEEK_API_KEY")
+if "GROQ_API_KEY" not in st.secrets:
+    st.error("❌ 未找到 GROQ_API_KEY，請在 .streamlit/secrets.toml 中新增 GROQ_API_KEY")
     client = None
 else:
     client = OpenAI(
-        api_key=st.secrets["DEEPSEEK_API_KEY"],
-        base_url="https://api.deepseek.com/v1"
+        api_key=st.secrets["GROQ_API_KEY"],
+        base_url="https://api.groq.com/openai/v1"
     )
 
-# 使用最新 DeepSeek-V4-Flash（速度快、性價比高）
-# 如需最強版本可改成 "deepseek-v4-pro"
-MODEL_NAME = "deepseek-v4-flash"
+# 使用 Groq 最強免費高速模型
+MODEL_NAME = "llama3-70b-8192"
 
 SYSTEM_PROMPT = """
 你是一位 Sing Yin Secondary School Study Prefect Team 的資深管理員。
@@ -33,7 +32,7 @@ SYSTEM_PROMPT = """
 }
 
 解析規則：
-- 如果備註提到「固定週一總值班」、「每週一值班」、「週一總值班」→ fixed_general_duty = "MONDAY"
+- 如果備註提到「固定週一總值班」、「每週一值班」→ fixed_general_duty = "MONDAY"
 - 如果提到「固定週二」→ "TUESDAY"，以此類推
 - 如果提到「隊長」、「Assistant Head」、「副隊長」→ role = "Assistant Head Study Prefect"
 - 如果沒有提到固定值班 → "NONE"
@@ -47,7 +46,7 @@ def ai_parse_remarks(students_df: pd.DataFrame) -> pd.DataFrame:
         return students_df
 
     if client is None:
-        st.error("DeepSeek API 未正確配置，請檢查 secrets.toml")
+        st.error("Groq API 未正確配置，請檢查 secrets.toml")
         return students_df
 
     df = students_df.copy()
@@ -60,7 +59,7 @@ def ai_parse_remarks(students_df: pd.DataFrame) -> pd.DataFrame:
         if not remarks or remarks.lower() in ["nan", "", "none"]:
             continue
 
-        status_text.text(f"DeepSeek V4 正在解析第 {idx+1} 位學生：{row.get('name', '未知')}")
+        status_text.text(f"Groq AI 正在解析第 {idx+1} 位學生：{row.get('name', '未知')}")
 
         try:
             response = client.chat.completions.create(
@@ -100,5 +99,5 @@ def ai_parse_remarks(students_df: pd.DataFrame) -> pd.DataFrame:
         progress_bar.progress((idx + 1) / len(df))
 
     progress_bar.empty()
-    status_text.success("✅ DeepSeek V4 AI 解析完成！所有欄位已自動更新")
+    status_text.success("✅ Groq AI 解析完成！所有欄位已自動更新")
     return df
