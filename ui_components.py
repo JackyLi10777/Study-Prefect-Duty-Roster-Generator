@@ -5,19 +5,14 @@ import datetime
 import io
 import random
 
-from config import DAYS, ROWS_ROSTER, DAILY_VERSES, VERSION, APP_TITLE
+from config import DAYS, ROWS_ROSTER, DAILY_VERSES, VERSION, APP_TITLE, ALL_VERSES
 from core import generate_roster
 from utils import process_roster_import, export_system_backup, import_system_backup
 from data import get_demo_dataframe, get_sample_format_dataframe
 from ai_parser import ai_parse_remarks
 
-# 所有金句合併成一個大列表（方便隨機刷新）
-ALL_VERSES = []
-for day_list in DAILY_VERSES.values():
-    ALL_VERSES.extend(day_list)
-
 def show_daily_verse():
-    # 使用 session_state 記住當前顯示的金句
+    # 使用 session_state 記住目前顯示的金句
     if "current_verse" not in st.session_state or st.session_state.current_verse is None:
         st.session_state.current_verse = random.choice(ALL_VERSES)
 
@@ -28,10 +23,12 @@ def show_daily_verse():
     </div>
     """, unsafe_allow_html=True)
 
-    # 新增刷新金句按鈕
-    if st.button("🔄 刷新金句", use_container_width=True):
-        st.session_state.current_verse = random.choice(ALL_VERSES)
-        st.rerun()
+    # 刷新金句按鈕
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        if st.button("🔄 刷新金句", use_container_width=True):
+            st.session_state.current_verse = random.choice(ALL_VERSES)
+            st.rerun()
 
 def render_sidebar():
     with st.sidebar:
