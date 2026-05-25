@@ -1,109 +1,66 @@
 # ai_parser.py
+import streamlit as st
 import pandas as pd
-import re
+import openai
+import json
 
-# ==========================================
-# 1. 星期對應表（中文關鍵字 → 英文代碼）
-# ==========================================
-DAY_MAP = {
-    "週一": "MONDAY",
-    "星期一": "MONDAY",
-    "周一": "MONDAY",
-    "一": "MONDAY",
-    "週二": "TUESDAY",
-    "星期二": "TUESDAY",
-    "周二": "TUESDAY",
-    "二": "TUESDAY",
-    "週三": "WEDNESDAY",
-    "星期三": "WEDNESDAY",
-    "周三": "WEDNESDAY",
-    "三": "WEDNESDAY",
-    "週四": "THURSDAY",
-    "星期四": "THURSDAY",
-    "周四": "THURSDAY",
-    "四": "THURSDAY",
-    "週五": "FRIDAY",
-    "星期五": "FRIDAY",
-    "周五": "FRIDAY",
-    "五": "FRIDAY",
-}
+def ai_parse_remarks(students_df: pd.DataFrame) -> pd.DataFrame:
+    if students_df.empty:
+        st.warning("名冊為空，無法進行 AI 解析")
+        return students_df
 
-# ==========================================
-# 2. AI 智能解析 Remarks 主函數（完整版）
-# ==========================================
-def ai_parse_remarks(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    根據「備註」欄位中的中文描述，自動更新：
-    - fixed_general_duty
-    - available
-    - role（如果提到隊長/副隊長）
-    """
-    if df.empty or "remarks" not in df.columns:
-        return df
+    # === 從 Streamlit Secrets 讀取 API Key（推薦 Cloud 部署方式）===
+    if "OPENAI_API_KEY" not in st.secrets:
+        st.error("❌ 請在 .streamlit/secrets.toml 中新增 OPENAI_API_KEY = \"您的金鑰\"")
+        return students_df
 
-    df = df.copy()
+    openai.api_key = st.secrets["OPENAI_API_KEY"]
+
+    df = students_df.copy()
+
     for idx, row in df.iterrows():
-        remarks = str(row.get("remarks", "")).strip()
-        if not remarks:
+        remarks = str(row.get('remarks', '')).strip()
+        if not remarks or remarks.lower() in ["", "nan", "none", "無"]:
             continue
 
-        remarks_upper = remarks.upper()
-        name = str(row.get("name", "")).strip()
+        prompt = f"""
+你是 Sing Yin Secondary School Study Prefect 管理員。
+請根據以下「備註」智能解析並更新三個欄位：
 
-        # 1. 固定總值班解析
-        fixed_day = None
-        for cn, en in DAY_MAP.items():
-            if cn in remarks:
-                fixed_day = en
-                break
-        if fixed_day:
-            df.at[idx, "fixed_general_duty"] = fixed_day
+學生姓名: {row.get('name', '')}
+年級: {row.get('form', '')}
+備註: {remarks}
 
-        # 2. 可用日子解析（如果提到「只可」或「可用」）
-        available_days = []
-        for cn, en in DAY_MAP.items():
-            if cn in remarks:
-                available_days.append(en)
-        if available_days:
-            # 如果有明確提到可用日子，就覆蓋
-            df.at[idx, "available"] = ",".join(available_days)
-        elif "全週" in remarks or "每天" in remarks or "全部" in remarks:
-            df.at[idx, "available"] = "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY"
+請嚴格以 JSON 格式回覆，不要有任何多餘文字：
+{{
+  "fixed_general_duty": "NONE" 或 "MONDAY" 或 "TUESDAY" 或 "WEDNESDAY" 或 "THURSDAY" 或 "FRIDAY",
+  "available": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY" （逗號分隔，可用日子）,
+  "role": "Study Prefect" 或 "Assistant Head Study Prefect"
+}}
+"""
 
-        # 3. 職級解析（隊長、副隊長）
-        if any(keyword in remarks_upper for keyword in ["隊長", "HEAD", "CAPTAIN", "總隊長"]):
-            df.at[idx, "role"] = "Assistant Head Study Prefect"
-        elif any(keyword in remarks_upper for keyword in ["副隊長", "ASSISTANT HEAD"]):
-            df.at[idx, "role"] = "Assistant Head Study Prefect"
+        try:
+            response = openai.ChatCompletion.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=300
+            )
+            result = response.choices[0].message.content.strip()
 
-        # 4. 老帶新標記（F.3 學生）
-        if "老帶新" in remarks or "帶新" in remarks or "F3" in remarks_upper or "中三" in remarks:
-            if pd.isna(df.at[idx, "available"]) or df.at[idx, "available"] == "":
-                df.at[idx, "available"] = "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY"
+            parsed = json.loads(result)
 
+            # 更新欄位
+            if "fixed_general_duty" in parsed:
+                df.at[idx, "fixed_general_duty"] = str(parsed["fixed_general_duty"]).strip().upper()
+            if "available" in parsed:
+                df.at[idx, "available"] = str(parsed["available"]).strip().upper()
+            if "role" in parsed:
+                df.at[idx, "role"] = str(parsed["role"]).strip()
+
+        except Exception as e:
+            st.warning(f"AI 解析第 {idx+1} 位學生失敗: {str(e)}")
+            continue
+
+    st.success("✅ AI 已成功解析並更新所有 Remarks")
     return df
-
-# ==========================================
-# 3. 測試用示範函數（開發時可呼叫）
-# ==========================================
-def test_ai_parser():
-    test_df = pd.DataFrame({
-        "name": ["陳卓軒", "李浩然", "張凱傑"],
-        "form": ["F.5", "F.5", "F.4"],
-        "role": ["Study Prefect", "Study Prefect", "Study Prefect"],
-        "fixed_general_duty": ["NONE", "NONE", "NONE"],
-        "available": ["", "", ""],
-        "history_duties": [12, 10, 9],
-        "history_weight": [12.0, 10.0, 13.5],
-        "remarks": [
-            "固定週一總值班 / 隊長",
-            "只可週三和週五",
-            "老帶新 / 中三學生優先配對"
-        ]
-    })
-    updated = ai_parse_remarks(test_df)
-    print("✅ AI 解析測試結果：")
-    print(updated[["name", "fixed_general_duty", "available", "role", "remarks"]])
-    return updated
-
-print("✅ ai_parser.py 載入完成 | AI 智能解析 Remarks 功能已就緒")
