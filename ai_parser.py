@@ -1,32 +1,29 @@
 # ai_parser.py
 import streamlit as st
 import pandas as pd
-import google.generativeai as genai
 import json
 import time
+from openai import OpenAI
 
 # ==========================================
-# Gemini 配置（Streamlit Cloud 相容）
+# DeepSeek V4 配置（2026 年 5 月最新版本）
 # ==========================================
-if "GEMINI_API_KEY" not in st.secrets:
-    st.error("❌ 未找到 GEMINI_API_KEY，請在 .streamlit/secrets.toml 中新增 GEMINI_API_KEY = '您的金鑰'")
-    genai.configure(api_key=None)
+if "DEEPSEEK_API_KEY" not in st.secrets:
+    st.error("❌ 未找到 DEEPSEEK_API_KEY，請在 .streamlit/secrets.toml 中新增 DEEPSEEK_API_KEY")
+    client = None
 else:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    client = OpenAI(
+        api_key=st.secrets["DEEPSEEK_API_KEY"],
+        base_url="https://api.deepseek.com/v1"
+    )
 
-model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
-    generation_config={
-        "temperature": 0.2,
-        "top_p": 0.95,
-        "top_k": 40,
-        "max_output_tokens": 2048,
-    }
-)
+# 使用最新 DeepSeek-V4-Flash（速度快、性價比高）
+# 如需最強版本可改成 "deepseek-v4-pro"
+MODEL_NAME = "deepseek-v4-flash"
 
 SYSTEM_PROMPT = """
 你是一位 Sing Yin Secondary School Study Prefect Team 的資深管理員。
-請根據學生「備註 (Remarks)」欄位的中文內容，智能解析並輸出以下 JSON 格式：
+請根據學生「備註 (Remarks)」欄位的中文內容，智能解析並輸出以下純 JSON 格式，不要任何額外文字：
 
 {
   "fixed_general_duty": "MONDAY" 或 "TUESDAY" 或 "WEDNESDAY" 或 "THURSDAY" 或 "FRIDAY" 或 "NONE",
@@ -35,17 +32,21 @@ SYSTEM_PROMPT = """
   "remarks_processed": "處理後的備註摘要"
 }
 
-規則：
+解析規則：
 - 如果備註提到「固定週一總值班」、「每週一值班」→ fixed_general_duty = "MONDAY"
-- 如果提到「隊長」、「Assistant Head」→ role = "Assistant Head Study Prefect"
-- 如果提到「F.3」且需要「老帶新」→ 優先讓 F.4/F.5 帶他
+- 如果提到「隊長」、「Assistant Head」、「副隊長」→ role = "Assistant Head Study Prefect"
+- 如果沒有提到固定值班 → "NONE"
 - 可用日子請盡量完整推斷，沒有提到的日子預設全可用
-- 只輸出純 JSON，不要任何額外文字
+- 只輸出純 JSON，不要任何說明或 markdown
 """
 
 def ai_parse_remarks(students_df: pd.DataFrame) -> pd.DataFrame:
     if students_df.empty:
         st.warning("名冊為空，無法進行 AI 解析")
+        return students_df
+
+    if client is None:
+        st.error("DeepSeek API 未正確配置，請檢查 secrets.toml")
         return students_df
 
     df = students_df.copy()
@@ -55,17 +56,24 @@ def ai_parse_remarks(students_df: pd.DataFrame) -> pd.DataFrame:
 
     for idx, row in df.iterrows():
         remarks = str(row.get("remarks", "")).strip()
-        if not remarks or remarks.lower() == "nan" or remarks == "":
+        if not remarks or remarks.lower() in ["nan", "", "none"]:
             continue
 
-        status_text.text(f"AI 正在解析第 {idx+1} 位學生：{row.get('name', '未知')}")
+        status_text.text(f"DeepSeek V4 正在解析第 {idx+1} 位學生：{row.get('name', '未知')}")
 
         try:
-            response = model.generate_content(
-                f"{SYSTEM_PROMPT}\n\n學生備註：{remarks}\n\n請直接輸出 JSON："
+            response = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": f"學生備註：{remarks}\n請直接輸出 JSON："}
+                ],
+                temperature=0.3,
+                max_tokens=800
             )
-            json_text = response.text.strip()
-            
+
+            json_text = response.choices[0].message.content.strip()
+
             # 清理可能的 markdown 包裹
             if json_text.startswith("```json"):
                 json_text = json_text.split("```json")[1].split("```")[0].strip()
@@ -76,20 +84,20 @@ def ai_parse_remarks(students_df: pd.DataFrame) -> pd.DataFrame:
 
             # 更新欄位
             if "fixed_general_duty" in parsed:
-                df.at[idx, "fixed_general_duty"] = parsed["fixed_general_duty"]
+                df.at[idx, "fixed_general_duty"] = str(parsed["fixed_general_duty"]).upper()
             if "available" in parsed:
-                df.at[idx, "available"] = parsed["available"]
+                df.at[idx, "available"] = str(parsed["available"]).upper()
             if "role" in parsed:
-                df.at[idx, "role"] = parsed["role"]
+                df.at[idx, "role"] = str(parsed["role"])
             if "remarks_processed" in parsed:
-                df.at[idx, "remarks"] = parsed["remarks_processed"]
+                df.at[idx, "remarks"] = str(parsed["remarks_processed"])
 
         except Exception as e:
             st.warning(f"第 {idx+1} 位學生解析失敗: {str(e)}")
-            time.sleep(0.5)
+            time.sleep(0.3)
 
         progress_bar.progress((idx + 1) / len(df))
 
     progress_bar.empty()
-    status_text.success("✅ AI Gemini 解析完成！所有欄位已自動更新")
+    status_text.success("✅ DeepSeek V4 AI 解析完成！所有欄位已自動更新")
     return df
