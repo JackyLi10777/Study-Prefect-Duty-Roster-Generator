@@ -1,83 +1,72 @@
 # ai_parser.py
 import streamlit as st
 import pandas as pd
-import json
-import time
 import google.generativeai as genai
+import json
+import re
 
 # ==========================================
-# Google Gemini 3.5 Flash 配置（2026 年 5 月最新版）
+# Gemini 配置（與 utils.py 共用）
 # ==========================================
-GEMINI_API_KEY = None
-model = None
-
 if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
-    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-    try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(
-            model_name="gemini-3.5-flash",
-            generation_config={
-                "temperature": 0.3,
-                "top_p": 0.95,
-                "top_k": 40,
-                "max_output_tokens": 2048,
-            }
-        )
-        st.success("✅ Gemini API 初始化成功", icon="🔥")
-    except Exception as e:
-        st.error(f"Gemini 初始化失敗: {str(e)}")
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    model = genai.GenerativeModel("gemini-3.5-flash")
 else:
-    st.warning("⚠️ 未設定 GEMINI_API_KEY，請在 .streamlit/secrets.toml 中新增 GEMINI_API_KEY")
+    model = None
 
+# ==========================================
+# AI 系統提示（精準解析 Remarks）
+# ==========================================
 SYSTEM_PROMPT = """
-你是一位 Sing Yin Secondary School Study Prefect Team 的資深管理員。
-請根據學生「備註 (Remarks)」欄位的中文內容，智能解析並輸出以下純 JSON 格式，不要任何額外文字：
+你是一位 Sing Yin Secondary School Study Prefect Team 的專業排班助理。
+請根據「備註 (remarks)」欄位的中文內容，智能解析並更新以下欄位。
+只輸出純 JSON，不要任何額外文字、解釋或 markdown。
 
+可解析的欄位規則：
+- "fixed_general_duty": 學年固定總值班 → MONDAY / TUESDAY / WEDNESDAY / THURSDAY / FRIDAY / NONE
+- "available": 可用日子 → 用逗號分隔，例如 "MONDAY,WEDNESDAY,FRIDAY"
+- "role": 職級 → "Study Prefect" 或 "Assistant Head Study Prefect"
+
+如果備註中提到「老帶新」「新任」「F.3」「Assistant Head」「固定值班」「Room302 優先」等關鍵字，請合理判斷。
+
+範例輸入：
+remarks: "老帶新，F.3 優先，固定星期三值班"
+
+正確輸出 JSON：
 {
-  "fixed_general_duty": "MONDAY" 或 "TUESDAY" 或 "WEDNESDAY" 或 "THURSDAY" 或 "FRIDAY" 或 "NONE",
-  "available": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY" （用逗號分隔，可用日子）,
-  "role": "Study Prefect" 或 "Assistant Head Study Prefect",
-  "remarks_processed": "處理後的備註摘要"
+  "fixed_general_duty": "WEDNESDAY",
+  "available": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY",
+  "role": "Study Prefect"
 }
 
-解析規則：
-- 如果備註提到「固定週一總值班」、「每週一值班」→ fixed_general_duty = "MONDAY"
-- 如果提到「固定週二」→ "TUESDAY"，以此類推
-- 如果提到「隊長」、「Assistant Head」、「副隊長」→ role = "Assistant Head Study Prefect"
-- 如果沒有提到固定值班 → "NONE"
-- 可用日子請盡量完整推斷，沒有提到的日子預設全可用
-- 只輸出純 JSON，不要任何說明或 markdown
+請嚴格遵守，只輸出 JSON。
 """
 
-def ai_parse_remarks(students_df: pd.DataFrame) -> pd.DataFrame:
+def ai_parse_remarks(students_df):
+    """AI 解析 Remarks 欄位並更新名冊"""
+    if model is None:
+        st.error("❌ Gemini API 未設定，請在 .streamlit/secrets.toml 加入 GEMINI_API_KEY")
+        return students_df
+
     if students_df.empty:
         st.warning("名冊為空，無法進行 AI 解析")
         return students_df
 
-    if model is None:
-        st.error("❌ Gemini API 未正確初始化，請檢查 secrets.toml 中的 GEMINI_API_KEY")
-        return students_df
+    updated_df = students_df.copy()
 
-    df = students_df.copy()
-    
     progress_bar = st.progress(0)
-    status_text = st.empty()
-
-    for idx, row in df.iterrows():
+    for idx, row in students_df.iterrows():
         remarks = str(row.get("remarks", "")).strip()
-        if not remarks or remarks.lower() in ["nan", "", "none"]:
+        if not remarks or remarks.lower() == "nan":
+            progress_bar.progress((idx + 1) / len(students_df))
             continue
 
-        status_text.text(f"Gemini 3.5 Flash 正在解析第 {idx+1} 位學生：{row.get('name', '未知')}")
-
         try:
-            response = model.generate_content(
-                f"{SYSTEM_PROMPT}\n\n學生備註：{remarks}\n\n請直接輸出 JSON："
-            )
+            prompt = f"{SYSTEM_PROMPT}\n\n備註內容：{remarks}"
+            response = model.generate_content(prompt)
             json_text = response.text.strip()
 
-            # 清理可能的 markdown 包裹
+            # 清理可能的 markdown
             if json_text.startswith("```json"):
                 json_text = json_text.split("```json")[1].split("```")[0].strip()
             elif json_text.startswith("```"):
@@ -87,20 +76,17 @@ def ai_parse_remarks(students_df: pd.DataFrame) -> pd.DataFrame:
 
             # 更新欄位
             if "fixed_general_duty" in parsed:
-                df.at[idx, "fixed_general_duty"] = str(parsed["fixed_general_duty"]).upper()
+                updated_df.at[idx, "fixed_general_duty"] = str(parsed["fixed_general_duty"]).upper()
             if "available" in parsed:
-                df.at[idx, "available"] = str(parsed["available"]).upper()
+                updated_df.at[idx, "available"] = str(parsed["available"]).upper()
             if "role" in parsed:
-                df.at[idx, "role"] = str(parsed["role"])
-            if "remarks_processed" in parsed:
-                df.at[idx, "remarks"] = str(parsed["remarks_processed"])
+                updated_df.at[idx, "role"] = str(parsed["role"])
 
-        except Exception as e:
-            st.warning(f"第 {idx+1} 位學生解析失敗: {str(e)}")
-            time.sleep(0.5)
+        except Exception:
+            pass  # 單筆失敗不中斷整體流程
 
-        progress_bar.progress((idx + 1) / len(df))
+        progress_bar.progress((idx + 1) / len(students_df))
 
     progress_bar.empty()
-    status_text.success("✅ Gemini 3.5 Flash AI 解析完成！所有欄位已自動更新")
-    return df
+    st.success("✅ AI 已成功解析並更新所有 Remarks 欄位")
+    return updated_df
