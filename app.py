@@ -1,230 +1,256 @@
-# app.py
-import streamlit as st
+# core.py
 import pandas as pd
-import plotly.express as px
-import datetime
-import io
-import json
-import base64
+import random
 
-from config import DAYS, ROWS_ROSTER, VERSION, APP_TITLE, DAILY_VERSES
-from core import validate_and_compute, recommend_substitutes
-from utils import generate_pdf, export_system_backup, import_system_backup, process_roster_import
-from ui_components import render_sidebar, show_daily_verse, render_control_buttons
+from config import DAYS, ROWS_ROSTER, WEIGHTS
 
-# ==========================================
-# Session State 初始化
-# ==========================================
-if 'students_df' not in st.session_state:
-    st.session_state.students_df = pd.DataFrame(columns=["name", "form", "class", "role", "fixed_general_duty", "available", "history_duties", "history_weight", "remarks"])
-if 'roster_df' not in st.session_state:
-    st.session_state.roster_df = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
-if 'logo_data' not in st.session_state:
-    st.session_state.logo_data = None
-if 'show_clear_confirm' not in st.session_state:
-    st.session_state.show_clear_confirm = False
-if 'leave_tracker_input' not in st.session_state:
-    st.session_state.leave_tracker_input = []
-if 'master_report_df' not in st.session_state:
-    st.session_state.master_report_df = pd.DataFrame()
-if 'manual_weights' not in st.session_state:
-    st.session_state.manual_weights = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)
+def generate_roster(students_df: pd.DataFrame, leave_students: list, special_closures: list, seed: int) -> pd.DataFrame:
+    if students_df.empty or students_df['name'].str.strip().eq('').all():
+        # 改為返回空表格，不在 core.py 呼叫 st.error（避免 NameError）
+        return pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
 
-# ==========================================
-# 使用說明書（完整版 + 直接反饋）
-# ==========================================
-HELP_TEXT = """
-# 📖 Sing Yin Secondary School Study Prefect Duty Roster 使用說明書  
-**版本**：v1.4 手動調整負荷 + DeepSeek AI 版  
-**更新日期**：2026 年 5 月 25 日  
+    rng = random.Random(seed)
+    new_roster = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
 
-**適用對象**：Study Prefect Team Advisor、Head Study Prefect、Assistant Head Study Prefect
+    # 保留手動標記的 "X"
+    for r in ROWS_ROSTER:
+        for d in DAYS:
+            if r in st.session_state.roster_df.index and d in st.session_state.roster_df.columns:
+                if str(st.session_state.roster_df.at[r, d]).strip().upper() == "X":
+                    new_roster.at[r, d] = "X"
 
----
+    # 特殊不開放時段
+    for item in special_closures:
+        try:
+            day_part, room_part = item.split(" - ")
+            for r in ROWS_ROSTER:
+                if room_part in r:
+                    new_roster.at[r, day_part] = "X"
+        except ValueError:
+            continue
 
-### 系統主要功能
-1. **智能公平排班**：自動考慮歷史負荷、可用日子、老帶新（F.3 由 F.4/F.5 帶）、固定總值班、職級限制
-2. **老帶新機制**：系統會自動讀取名冊中的「年級」欄位進行判斷（F.3 為 junior）
-3. **AI 智能解析 Remarks**：使用 DeepSeek V4 自動理解中文備註，更新固定值班、可用日子、職級
-4. **手動調整負荷**：可針對每個崗位本次值班手動修改累計負荷點數（即時生效）
-5. **智慧替補推薦**：請假時自動推薦最合適的替補人員
-6. **彩色 PDF 公告班表** + Excel + Markdown 多格式導出
-7. **Cloud 備份 / 還原**：解決 Streamlit Cloud 休眠重置問題
-8. **每日聖經金句** + 校徽顯示開關
+    # 固定總值班處理
+    for _, s in students_df.iterrows():
+        name = str(s.get('name', '')).strip()
+        fixed_day = str(s.get('fixed_general_duty', '')).strip().upper()
+        if name and fixed_day in DAYS and new_roster.at['Assist. in charge (General Duty)', fixed_day] != "X":
+            new_roster.at['Assist. in charge (General Duty)', fixed_day] = name
 
----
+    students = students_df.to_dict('records')
+    current_week_weights = {}
+    student_form_map = {}
+    student_avail_cache = {}
+    base_historical_weights = {}
 
-### 操作流程（推薦）
-1. 側邊欄 → 上傳或載入名冊（或使用「一鍵載入官方示範名冊」）
-2. 側邊欄 → 點擊「🤖 AI 智能解析 Remarks」（強烈建議）
-3. 主畫面 → 設定特殊不開放時段 → 點擊「🚀 智能計算」生成排班
-4. 檢查提示 → 若有警告請修正
-5. （可選）使用「🔧 手動調整本次值班負荷指數」微調
-6. 點擊導出 PDF / Excel / Markdown / 備份
+    for s in students:
+        name = str(s.get('name', '')).strip()
+        if not name: continue
+        current_week_weights[name] = 0.0
+        student_form_map[name] = str(s.get('form', '')).upper().strip()
+        base_historical_weights[name] = float(s.get('history_weight', 0.0)) if pd.notna(s.get('history_weight')) else 0.0
+        raw_avail = str(s.get('available', '')).upper().split(',')
+        student_avail_cache[name] = {d.strip() for d in raw_avail if d.strip()}
 
----
+    last_duty_day = {name: -2 for name in current_week_weights}
 
-### 常見問題
-- **老帶新**：系統自動讀取名冊「年級」欄位，F.3 學生會被優先分配給 F.4/F.5 帶領。
-- **手動調整負荷**：在「🔧 手動調整本次值班負荷指數」區塊直接修改數字，系統會即時更新最終總計。
-- **PDF 顯示校徽**：側邊欄有「🖼️ 顯示校徽」開關，可隨時切換。
-- **備份還原**：每次生成排班後建議點擊「⬇️ 導出完整備份」。
+    for d_idx, day in enumerate(DAYS):
+        assigned_today = set()
+        fixed_pic = str(new_roster.at['Assist. in charge (General Duty)', day]).strip()
+        if fixed_pic and fixed_pic not in ["", "X"]:
+            assigned_today.add(fixed_pic)
+        
+        dynamic_roles = [r for r in ROWS_ROSTER if r != 'Assist. in charge (General Duty)']
+        rng.shuffle(dynamic_roles)
+        dynamic_roles.sort(key=lambda x: 1 if "- 2" in x else 0)
 
----
+        for role in dynamic_roles:
+            if new_roster.at[role, day] == "X":
+                continue
+            if 'Room202' in role and day in ['TUESDAY', 'FRIDAY']:
+                new_roster.at[role, day] = ""
+                continue
 
-### 📧 直接反饋給開發者
-如果您在使用過程中遇到任何問題、想提出建議，或需要客製化功能，請直接點擊下方按鈕寄信給我：
+            # ==================== 強化老帶新機制 ====================
+            partner_is_junior = False
+            if "- 2" in role:
+                partner_role = role.replace("- 2", "- 1")
+                partner_name = str(new_roster.at[partner_role, day]).strip()
+                if partner_name not in ["", "X"]:
+                    partner_form = student_form_map.get(partner_name, "")
+                    if "3" in partner_form:   # F.3 為 junior
+                        partner_is_junior = True
 
-[📧 點此直接寄信給開發者](mailto:s10777@syss.edu.hk?subject=Study%20Prefect%20Duty%20Roster%20反饋&body=您好，我是...%0A%0A問題描述：%0A%0A建議：)
+            candidates = []
+            for s in students:
+                name = str(s.get('name', '')).strip()
+                if not name or name in leave_students or name in assigned_today:
+                    continue
+                if day not in student_avail_cache.get(name, set()):
+                    continue
 
----
+                form_str = student_form_map.get(name, "")
+                # 老帶新嚴格判斷：F.3 不能帶 F.3，必須由 F.4/F.5 帶 F.3
+                if partner_is_junior and "3" in form_str:
+                    continue
 
-**如有任何問題，歡迎隨時聯絡我！**  
-Sing Yin Secondary School Study Prefect Platform 開發團隊
-"""
+                is_ahp = str(s.get('role', '')).strip() == "Assistant Head Study Prefect"
+                if (role.startswith('Assist') and not is_ahp) or (not role.startswith('Assist') and is_ahp):
+                    continue
 
-def main():
-    render_sidebar()
+                score = 0
+                w = WEIGHTS[role]
+                if last_duty_day.get(name, -2) == d_idx - 1: score += 1000
+                if current_week_weights.get(name, 0) + w > 3.0: score += 800
 
-    st.markdown(f'<p class="main-title">{APP_TITLE}</p>', unsafe_allow_html=True)
-    st.markdown(f'<p class="main-subtitle">F.3–F.5 Study Prefect Duty Platform | {VERSION}</p>', unsafe_allow_html=True)
-    show_daily_verse()
+                is_senior = any(x in form_str for x in ["4", "5"])
+                if 'Room302' in role:
+                    score += 40 if is_senior else -40
+                elif 'Room303' in role or 'Room202' in role:
+                    score += -40 if is_senior else 40
 
-    with st.expander("📖 查看完整使用說明書（含直接反饋）", expanded=False):
-        st.markdown(HELP_TEXT)
+                total_load = base_historical_weights.get(name, 0) + current_week_weights.get(name, 0)
+                score += total_load * 20
+                candidates.append((score, name, w))
 
-    selected_closures = render_control_buttons()
+            if candidates:
+                candidates.sort(key=lambda x: x[0])
+                chosen = rng.choice(candidates[:min(2, len(candidates))])
+                chosen_name = chosen[1]
+                new_roster.at[role, day] = chosen_name
+                assigned_today.add(chosen_name)
+                current_week_weights[chosen_name] += chosen[2]
+                last_duty_day[chosen_name] = d_idx
 
-    leave_students = st.session_state.leave_tracker_input
-    audit_results = validate_and_compute(st.session_state.roster_df, st.session_state.students_df, leave_students, st.session_state.manual_weights)
-    st.session_state.master_report_df = audit_results["report_df"]
+    return new_roster
 
-    # 所有安全提示
-    if audit_results["typo"][0]:
-        st.markdown('<div class="danger-alert"><b>⚠️ 數據不符警告：</b><br>' + '<br>'.join(audit_results["typo"][1]) + '</div>', unsafe_allow_html=True)
-    if audit_results["duplicate"][0]:
-        st.markdown('<div class="danger-alert"><b>⚠️ 重複排班警告：</b><br>' + '<br>'.join(audit_results["duplicate"][1]) + '</div>', unsafe_allow_html=True)
-    if audit_results["leave_conflict"][0]:
-        st.markdown('<div class="danger-alert"><b>🛑 請假衝突：</b><br>' + '<br>'.join(audit_results["leave_conflict"][1]) + '</div>', unsafe_allow_html=True)
-        if st.button("🩹 一鍵清除請假同學", type="primary"):
+def validate_and_compute(roster_df: pd.DataFrame, students_df: pd.DataFrame, leave_students: list, manual_weights: pd.DataFrame = None):
+    if manual_weights is None:
+        manual_weights = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)
+
+    valid_names = set(str(name).strip() for name in students_df["name"].dropna() if str(name).strip())
+    typo_detected = False
+    vacuum_detected = False
+    duplicate_detected = False
+    leave_conflict_detected = False
+    
+    invalid_entries = []
+    vacuum_entries = []
+    duplicate_entries = []
+    leave_conflict_entries = []
+
+    for d in DAYS:
+        day_assigned_map = {}
+        for r in ROWS_ROSTER:
+            val = str(roster_df.at[r, d]).strip()
+            if not val:
+                if not ('Room202' in r and d in ['TUESDAY', 'FRIDAY']):
+                    vacuum_detected = True
+                    vacuum_entries.append(f"【{d} — {r}】")
+                continue
+            
+            if val == "X":
+                continue
+
+            if val not in valid_names:
+                typo_detected = True
+                invalid_entries.append(f"【{d} — {r}】: 「{val}」不存在於名冊中")
+                continue
+
+            if val in day_assigned_map:
+                duplicate_detected = True
+                duplicate_entries.append(f"【{d}】{val} 重複分配於「{day_assigned_map[val]}」與「{r}」")
+            else:
+                day_assigned_map[val] = r
+
+            if val in leave_students:
+                leave_conflict_detected = True
+                leave_conflict_entries.append(f"【{d} — {r}】: {val}")
+
+    final_records = []
+    for _, s in students_df.iterrows():
+        name = str(s.get('name', '')).strip()
+        if not name: continue
+        this_week_duties = 0 
+        this_week_weight = 0.0
+        
+        if not typo_detected:
             for d in DAYS:
                 for r in ROWS_ROSTER:
-                    if str(st.session_state.roster_df.at[r, d]).strip() in leave_students:
-                        st.session_state.roster_df.at[r, d] = ""
-            st.success("✅ 已清除")
-            st.rerun()
-    elif audit_results["vacuum"][0]:
-        st.markdown('<div class="warning-alert"><b>💡 空缺提示：</b><br>' + '<br>'.join(audit_results["vacuum"][1]) + '</div>', unsafe_allow_html=True)
+                    if str(roster_df.at[r, d]).strip() == name:
+                        base_w = WEIGHTS.get(r, 1.0)
+                        manual_w = float(manual_weights.at[r, d]) if r in manual_weights.index and d in manual_weights.columns else 0.0
+                        this_week_weight += base_w + manual_w
+                        this_week_duties += 1
+                        
+        final_records.append({
+            "學生姓名 (Prefect Name)": name,
+            "年級 (Form)": s.get('form', ''),
+            "班別 (Class)": s.get('class', ''),
+            "職級 (Role)": s.get('role', ''),
+            "學年固定總值班": s.get('fixed_general_duty', ''),
+            "歷史累計 (次)": int(s.get('history_duties', 0)) if pd.notna(s.get('history_duties')) else 0,
+            "歷史累計 (點)": float(s.get('history_weight', 0.0)) if pd.notna(s.get('history_weight')) else 0.0,
+            "當週新增 (次)": this_week_duties,
+            "當週新增 (點)": round(this_week_weight, 1),
+            "最終總計值班次數 (次)": (int(s.get('history_duties', 0)) if pd.notna(s.get('history_duties')) else 0) + this_week_duties,
+            "最終總計加權負荷 (點)": round((float(s.get('history_weight', 0.0)) if pd.notna(s.get('history_weight')) else 0.0) + this_week_weight, 1),
+            "備註": s.get('remarks', '')
+        })
+        
+    return {
+        "typo": (typo_detected, invalid_entries),
+        "vacuum": (vacuum_detected, vacuum_entries),
+        "duplicate": (duplicate_detected, duplicate_entries),
+        "leave_conflict": (leave_conflict_detected, leave_conflict_entries),
+        "report_df": pd.DataFrame(final_records)
+    }
 
-    # 值班表預覽 + 手動修改
-    st.write("---")
-    st.subheader("📅 本週值班表")
-    tab_view, tab_edit = st.tabs(["📅 視覺公告版（彩色）", "✏️ 手動修改版"])
+def recommend_substitutes(roster_df, students_df, chosen_day, chosen_role):
+    current_person = str(roster_df.at[chosen_role, chosen_day]).strip()
+    if current_person in ["", "X"]:
+        return None, "該時段無需替補、為常規關閉或目前不開放。"
 
-    def apply_cell_style(val, role, day):
-        val = str(val).strip()
-        if val == "X": return "color:#EF4444;font-weight:bold;background:#FEF2F2;"
-        if 'Room202' in role and day in ['TUESDAY', 'FRIDAY']:
-            return "background:#E5E7EB;color:#9CA3AF;font-style:italic;"
-        if val == "": return "background:#F9FAFB;"
-        base = "font-weight:bold;text-align:center;"
-        if "Assist" in role: return base + "background:#FFF8E1;color:#B45309;"
-        if "Room302" in role: return base + "background:#D1FAE5;color:#166534;"
-        if "Room303" in role: return base + "background:#FEE2E2;color:#991B1B;"
-        if "Room202" in role: return base + "background:#DBEAFE;color:#1E40AF;"
-        return base
+    assigned_today = {str(roster_df.at[r, chosen_day]).strip() for r in ROWS_ROSTER if str(roster_df.at[r, chosen_day]).strip() not in ["", "X"]}
+    is_ahp_required = chosen_role.startswith('Assist')
+    partner_is_junior = False
 
-    with tab_view:
-        styled = st.session_state.roster_df.style.apply(
-            lambda row: [apply_cell_style(val, row.name, col) for col, val in row.items()], axis=1
-        )
-        st.dataframe(styled, use_container_width=True, height=320)
+    if "- 2" in chosen_role or "- 1" in chosen_role:
+        partner_role = chosen_role.replace("- 2", "- 1") if "- 2" in chosen_role else chosen_role.replace("- 1", "- 2")
+        partner_name = str(roster_df.at[partner_role, chosen_day]).strip()
+        if partner_name not in ["", "X"]:
+            p_match = students_df[students_df["name"].str.strip() == partner_name]
+            if not p_match.empty and "3" in str(p_match.iloc[0].get("form", "")):
+                partner_is_junior = True
 
-    with tab_edit:
-        st.markdown("<p style='font-size:13px; color:#666;'>💡 直接在下方表格修改人名或打 X 鎖定</p>", unsafe_allow_html=True)
-        edited_roster = st.data_editor(
-            st.session_state.roster_df,
-            use_container_width=True,
-            key="main_roster_editor_widget"
-        )
-        if not edited_roster.equals(st.session_state.roster_df):
-            st.session_state.roster_df = edited_roster
-            st.rerun()
+    candidates = []
+    for _, s in students_df.iterrows():
+        name = str(s.get('name', '')).strip()
+        if not name or name == current_person or name in assigned_today: 
+            continue
+        
+        avail_days = {d.strip().upper() for d in str(s.get('available', '')).split(',') if d.strip()}
+        if chosen_day not in avail_days: 
+            continue
+        
+        is_ahp = str(s.get('role', '')).strip() == "Assistant Head Study Prefect"
+        if (is_ahp_required and not is_ahp) or (not is_ahp_required and is_ahp): 
+            continue
+        if partner_is_junior and "3" in str(s.get('form', '')): 
+            continue
 
-    # 手動調整負荷
-    st.write("---")
-    st.subheader("🔧 手動調整本次值班負荷指數")
-    st.caption("針對每個崗位本次值班，手動修改累計負荷點數（調整後會即時更新最終總計）")
-    manual_col = st.data_editor(
-        st.session_state.manual_weights,
-        use_container_width=True,
-        key="manual_weight_editor"
-    )
-    if not manual_col.equals(st.session_state.manual_weights):
-        st.session_state.manual_weights = manual_col
-        st.rerun()
+        this_week_weight = 0.0
+        for d in DAYS:
+            for r in ROWS_ROSTER:
+                if str(roster_df.at[r, d]).strip() == name:
+                    this_week_weight += WEIGHTS.get(r, 1.0)
 
-    # 累計審計表
-    st.write("---")
-    st.subheader("📊 累計動態工作負荷審計表（已包含手動調整）")
-    if not st.session_state.master_report_df.empty:
-        st.dataframe(st.session_state.master_report_df, use_container_width=True, hide_index=True)
-    else:
-        st.info("請先生成排班表以顯示審計表")
+        candidates.append({
+            "替補學生姓名": name,
+            "年級 (Form)": s.get('form', ''),
+            "職級 (Role)": s.get('role', ''),
+            "最終總計加權負荷 (點)": round((float(s.get('history_weight', 0.0)) if pd.notna(s.get('history_weight')) else 0.0) + this_week_weight, 1)
+        })
 
-    # 工作量圖表
-    if not st.session_state.master_report_df.empty:
-        st.write("---")
-        st.subheader("🦅 全體累積工作點數公平性動態監控")
-        fig = px.bar(
-            st.session_state.master_report_df,
-            x='學生姓名 (Prefect Name)',
-            y='最終總計加權負荷 (點)',
-            text_auto='.1f',
-            color='最終總計加權負荷 (點)',
-            color_continuous_scale='YlOrBr'
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-    # PDF + 多格式導出
-    st.write("---")
-    st.subheader("📤 導出功能")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button("📄 匯出 A4 橫式公告 PDF", use_container_width=True):
-            logo_b64 = base64.b64encode(st.session_state.logo_data).decode() if st.session_state.get("logo_data") else None
-            pdf_bytes = generate_pdf(st.session_state.roster_df, st.session_state.master_report_df, logo_b64)
-            if pdf_bytes:
-                st.download_button("💾 下載 PDF", pdf_bytes, f"SYSS_Roster_{datetime.date.today().strftime('%Y%m%d')}.pdf", "application/pdf", use_container_width=True)
-
-    with col2:
-        output_excel = io.BytesIO()
-        with pd.ExcelWriter(output_excel, engine='openpyxl') as writer:
-            st.session_state.roster_df.to_excel(writer, sheet_name='本週值班表')
-            st.session_state.master_report_df.to_excel(writer, sheet_name='工作負荷統計', index=False)
-        st.download_button("📊 下載 Excel (.xlsx)", output_excel.getvalue(), f"SYSS_Prefect_Roster_{datetime.date.today().strftime('%Y%m%d')}.xlsx", use_container_width=True)
-
-    with col3:
-        md_data = "### 本週值班表\n\n" + st.session_state.roster_df.to_markdown() + "\n\n### 工作負荷統計\n\n" + st.session_state.master_report_df.to_markdown(index=False)
-        st.download_button("📝 下載 Markdown (.md)", md_data.encode('utf-8'), f"SYSS_Roster_{datetime.date.today().strftime('%Y%m%d')}.md", use_container_width=True)
-
-    # 智慧替補
-    st.write("---")
-    st.subheader("🔍 智慧替補推薦")
-    c1, c2 = st.columns(2)
-    with c1:
-        chosen_day = st.selectbox("日期", DAYS, key="sub_day")
-    with c2:
-        chosen_role = st.selectbox("崗位", ROWS_ROSTER, key="sub_role")
-
-    if st.button("🔍 尋找最優替補", type="primary", use_container_width=True):
-        sub_df, msg = recommend_substitutes(st.session_state.roster_df, st.session_state.students_df, chosen_day, chosen_role)
-        if sub_df is not None:
-            st.dataframe(sub_df, use_container_width=True, hide_index=True)
-        else:
-            st.warning(msg)
-
-    st.caption(f"Sing Yin Secondary School Study Prefect Platform | {VERSION}")
-
-if __name__ == "__main__":
-    main()
+    if candidates:
+        return pd.DataFrame(candidates).sort_values(by="最終總計加權負荷 (點)"), None
+    return None, "找不到符合天數可用與職級限制的替補人員。"
