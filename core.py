@@ -4,9 +4,6 @@ import random
 
 from config import DAYS, ROWS_ROSTER, WEIGHTS
 
-# ==========================================
-# 1. 核心排班演算法（完整版）
-# ==========================================
 def generate_roster(students_df: pd.DataFrame, leave_students: list, special_closures: list, seed: int) -> pd.DataFrame:
     if students_df.empty or students_df['name'].str.strip().eq('').all():
         st.error("⚠️ 學生名冊為空，請先在側邊欄新增或導入資料！")
@@ -69,17 +66,19 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
         for role in dynamic_roles:
             if new_roster.at[role, day] == "X":
                 continue
-
             if 'Room202' in role and day in ['TUESDAY', 'FRIDAY']:
                 new_roster.at[role, day] = ""
                 continue
 
+            # ==================== 強化老帶新機制 ====================
             partner_is_junior = False
             if "- 2" in role:
                 partner_role = role.replace("- 2", "- 1")
                 partner_name = str(new_roster.at[partner_role, day]).strip()
-                if partner_name not in ["", "X"] and "3" in student_form_map.get(partner_name, ""):
-                    partner_is_junior = True
+                if partner_name not in ["", "X"]:
+                    partner_form = student_form_map.get(partner_name, "")
+                    if "3" in partner_form:   # F.3 為 junior
+                        partner_is_junior = True
 
             candidates = []
             for s in students:
@@ -88,8 +87,9 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
                     continue
                 if day not in student_avail_cache.get(name, set()):
                     continue
-                
+
                 form_str = student_form_map.get(name, "")
+                # 老帶新嚴格判斷：F.3 不能帶 F.3，必須由 F.4/F.5 帶 F.3
                 if partner_is_junior and "3" in form_str:
                     continue
 
@@ -123,9 +123,6 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
 
     return new_roster
 
-# ==========================================
-# 2. 全局數據審計與雙軌統計大表計算中心（完整版）
-# ==========================================
 def validate_and_compute(roster_df: pd.DataFrame, students_df: pd.DataFrame, leave_students: list):
     valid_names = set(str(name).strip() for name in students_df["name"].dropna() if str(name).strip())
     typo_detected = False
@@ -203,9 +200,6 @@ def validate_and_compute(roster_df: pd.DataFrame, students_df: pd.DataFrame, lea
         "report_df": pd.DataFrame(final_records)
     }
 
-# ==========================================
-# 3. 智慧替補推薦系統（完整版）
-# ==========================================
 def recommend_substitutes(roster_df, students_df, chosen_day, chosen_role):
     current_person = str(roster_df.at[chosen_role, chosen_day]).strip()
     if current_person in ["", "X"]:
