@@ -7,7 +7,7 @@ import datetime
 import base64
 
 # ==========================================
-# 0. PDF 支援強固檢查（Streamlit Cloud 專用）
+# 0. PDF 支援強固檢查
 # ==========================================
 try:
     from weasyprint import HTML
@@ -62,7 +62,7 @@ def process_roster_import(uploaded_file):
         st.sidebar.error(f"❌ 導入失敗: {str(e)}")
 
 # ==========================================
-# 2. 系統完整備份 / 還原（支援手動調整負荷）
+# 2. 系統完整備份 / 還原
 # ==========================================
 def export_system_backup(master_df):
     backup_data = {
@@ -115,12 +115,25 @@ def import_system_backup(uploaded_json_file):
         st.sidebar.error(f"❌ 還原失敗: {str(e)}")
 
 # ==========================================
-# 3. A4 橫式 PDF 生成引擎（完整版 + 手動負荷支援）
+# 3. A4 橫式 PDF 生成引擎（已強化 logo 讀取）
 # ==========================================
 def generate_pdf(roster_df, master_report_df, logo_b64=None):
     if not PDF_AVAILABLE:
         st.error("❌ PDF 引擎未就緒，請確認 packages.txt 已加入 weasyprint 並重新部署")
         return None
+
+    # 如果沒有傳入 logo_b64，嘗試從 session_state 或 GitHub 檔案讀取
+    if logo_b64 is None:
+        if st.session_state.get("logo_data"):
+            logo_b64 = base64.b64encode(st.session_state.logo_data).decode()
+        else:
+            try:
+                with open("logo.png", "rb") as f:
+                    logo_data = f.read()
+                    logo_b64 = base64.b64encode(logo_data).decode()
+                    st.session_state.logo_data = logo_data  # 存入 session_state
+            except FileNotFoundError:
+                logo_b64 = None  # 沒有 logo 就繼續生成 PDF
 
     today = datetime.date.today().strftime("%Y-%m-%d")
     html_table = roster_df.to_html(classes='table')
