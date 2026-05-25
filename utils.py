@@ -23,7 +23,7 @@ except (ImportError, OSError, Exception) as e:
     st.warning("⚠️ WeasyPrint 未就緒（PDF 功能暫時無法使用）。請確認 GitHub 已加入 packages.txt 並重新部署。")
 
 # ==========================================
-# Gemini 配置（與 ai_parser.py 共用）
+# Gemini 配置
 # ==========================================
 if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -212,7 +212,7 @@ def import_system_backup(uploaded_json_file):
         st.sidebar.error(f"❌ 還原失敗: {str(e)}")
 
 # ==========================================
-# 3. A4 橫式 PDF 生成引擎（已強化 logo 讀取）
+# 3. A4 橫式 PDF 生成引擎
 # ==========================================
 def generate_pdf(roster_df, master_report_df, logo_b64=None):
     if not PDF_AVAILABLE:
