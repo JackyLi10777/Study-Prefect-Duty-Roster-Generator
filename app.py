@@ -34,12 +34,12 @@ def main():
     # 側邊欄只放管理功能
     render_sidebar()
 
-    # 主畫面標題與金句
+    # 主畫面 - 集中常用功能
     st.markdown(f'<p class="main-title">{APP_TITLE}</p>', unsafe_allow_html=True)
     st.markdown(f'<p class="main-subtitle">F.3–F.5 Study Prefect Duty Platform | {VERSION}</p>', unsafe_allow_html=True)
+    
     show_daily_verse()
 
-    # 常用功能集中在主畫面
     st.write("---")
     selected_closures = render_control_buttons()
 
@@ -102,7 +102,7 @@ def main():
     # 手動調整負荷（常用功能）
     st.write("---")
     st.subheader("🔧 手動調整本次值班負荷指數")
-    st.caption("直接修改每個崗位的累計負荷點數")
+    st.caption("針對每個崗位本次值班，手動修改累計負荷點數")
     manual_col = st.data_editor(
         st.session_state.manual_weights,
         use_container_width=True,
@@ -118,7 +118,7 @@ def main():
     if not st.session_state.master_report_df.empty:
         st.dataframe(st.session_state.master_report_df, use_container_width=True, hide_index=True)
     else:
-        st.info("請先生成排班表")
+        st.info("請先生成排班表以顯示審計表")
 
     if not st.session_state.master_report_df.empty:
         st.write("---")
