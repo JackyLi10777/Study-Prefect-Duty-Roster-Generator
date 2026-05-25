@@ -1,8 +1,19 @@
 # ==========================================
 # .gitignore
-# Sing Yin Study Prefect Duty Roster - v1.3 模組化 + AI 版
-# 專案專用 Git 忽略設定
+# Sing Yin Study Prefect Duty Roster Generator
+# 最終優化版 - v1.4 (2026.05.25)
+# 專門保護 AI API Key、敏感資訊與開發環境
 # ==========================================
+
+# ==================== 敏感資訊（最高優先保護） ====================
+.streamlit/secrets.toml          # DeepSeek / Gemini API Key 絕對不能上傳
+.env
+.env.example
+*.env
+secrets.json
+config.local.json
+*.key
+*.pem
 
 # ==================== Python 相關 ====================
 __pycache__/
@@ -36,10 +47,11 @@ env/
 env.bak/
 venv.bak/
 
-# ==================== Streamlit 相關 ====================
-.streamlit/secrets.toml          # 敏感資訊絕不上傳
+# ==================== Streamlit 專屬 ====================
 .streamlit/*.log
 .streamlit/debug.log
+.streamlit/secrets.toml.bak
+.streamlit/config.toml.bak
 
 # ==================== 資料與暫存檔案 ====================
 *.xlsx
@@ -49,10 +61,12 @@ venv.bak/
 *.json
 *.md.bak
 *.log
-.DS_Store
-Thumbs.db
+*.sqlite3
+*.db
 *.tmp
 *.temp
+.DS_Store
+Thumbs.db
 
 # ==================== IDE / 編輯器 ====================
 .vscode/
@@ -73,26 +87,28 @@ htmlcov/
 .ruff_cache/
 .hypothesis/
 
-# ==================== 其他不需要上傳的 ====================
-*.sqlite3
-*.db
+# ==================== Node.js / 前端（如果未來會用到） ====================
 node_modules/
 *.min.js
 *.map
+
+# ==================== 其他不需要上傳的 ====================
 *.pyc
 *.pyd
 *.pyo
-
-# ==================== 保留但不忽略的提醒 ====================
-# 以下檔案**必須保留**在上傳：
-# - .streamlit/config.toml
-# - requirements.txt
-# - packages.txt
-# - README.md
-# - 所有 .py 模組檔案
+*.DS_Store
+*.bak
+*.backup
 
 # ==========================================
 # 使用說明
-# 1. 建立這個 .gitignore 後，Git 就不會追蹤上述檔案
-# 2. 未來如果有敏感資訊（如 API Key），請放在 .streamlit/secrets.toml
+# ==========================================
+# 1. 這個 .gitignore 已完整保護您的 DeepSeek API Key
+# 2. 請確保 .streamlit/secrets.toml 絕對不會出現在 GitHub 上
+# 3. 未來新增任何敏感檔案，都請加到「敏感資訊」區塊
+# 4. 執行以下指令讓 Git 立即生效：
+#    git rm -r --cached .streamlit/secrets.toml 2>/dev/null || true
+#    git add .gitignore
+#    git commit -m "更新 .gitignore 強化 API Key 保護"
+#    git push
 # ==========================================
