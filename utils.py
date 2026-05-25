@@ -5,6 +5,7 @@ import io
 import json
 import datetime
 import base64
+import google.generativeai as genai
 
 # ==========================================
 # 0. PDF 支援強固檢查
@@ -15,6 +16,15 @@ try:
 except (ImportError, OSError, Exception) as e:
     PDF_AVAILABLE = False
     st.warning("⚠️ WeasyPrint 未就緒（PDF 功能暫時無法使用）。請確認 GitHub 已加入 packages.txt 並重新部署。")
+
+# ==========================================
+# Gemini 配置（與 ai_parser.py 共用）
+# ==========================================
+if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    model = genai.GenerativeModel("gemini-3.5-flash")
+else:
+    model = None
 
 # ==========================================
 # 1. 名冊導入引擎（完整版）
@@ -60,6 +70,89 @@ def process_roster_import(uploaded_file):
         st.rerun()
     except Exception as e:
         st.sidebar.error(f"❌ 導入失敗: {str(e)}")
+
+# ==========================================
+# AI 智能名冊導入（任意格式自動匹配）
+# ==========================================
+def smart_process_roster_import(uploaded_file):
+    """AI 自動識別任意欄位名稱與順序，只要內容有對應關鍵資訊即可"""
+    try:
+        if uploaded_file.name.endswith('.csv'):
+            df = pd.read_csv(uploaded_file)
+        else:
+            df = pd.read_excel(uploaded_file)
+
+        if df.empty or len(df.columns) < 2:
+            st.error("❌ 檔案為空或格式不正確")
+            return
+
+        sample_text = df.head(8).to_string(index=False)
+
+        prompt = f"""
+請分析以下 Excel/CSV 表格內容，將欄位自動對應到標準欄位名稱。
+只需輸出純 JSON，不要任何額外文字或說明。
+
+標準欄位定義：
+- "name": 姓名
+- "form": 年級 (F.3、F.4、F.5)
+- "class": 班別 (如 5A、4B)
+- "role": 職級 (Study Prefect 或 Assistant Head Study Prefect)
+- "fixed_general_duty": 學年固定總值班 (MONDAY/TUESDAY/.../NONE)
+- "available": 可用日子 (逗號分隔，如 MONDAY,WEDNESDAY,FRIDAY)
+- "history_duties": 歷史累計次數
+- "history_weight": 歷史累計點數
+- "remarks": 備註
+
+表格前8行內容：
+{sample_text}
+
+請輸出以下格式的 JSON：
+{{
+  "name": "實際欄位名稱",
+  "form": "實際欄位名稱",
+  ...
+}}
+"""
+
+        if model is None:
+            st.error("❌ Gemini API 未設定，請在 .streamlit/secrets.toml 加入 GEMINI_API_KEY")
+            return
+
+        with st.spinner("🤖 AI 正在智能分析您的名冊格式..."):
+            response = model.generate_content(prompt)
+            json_text = response.text.strip()
+
+            if json_text.startswith("```json"):
+                json_text = json_text.split("```json")[1].split("```")[0].strip()
+            elif json_text.startswith("```"):
+                json_text = json_text.split("```")[1].strip()
+
+            mapping = json.loads(json_text)
+
+        rename_dict = {v: k for k, v in mapping.items() if v in df.columns}
+        df = df.rename(columns=rename_dict)
+
+        required_cols = ["name", "form", "class", "role", "fixed_general_duty", "available", "history_duties", "history_weight", "remarks"]
+        for col in required_cols:
+            if col not in df.columns:
+                if col == "fixed_general_duty": df[col] = "NONE"
+                elif col == "available": df[col] = "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY"
+                elif col == "history_duties": df[col] = 0
+                elif col == "history_weight": df[col] = 0.0
+                else: df[col] = ""
+
+        df["name"] = df["name"].astype(str).str.strip()
+        df = df[df["name"].notna() & (df["name"] != "")]
+        df["history_duties"] = pd.to_numeric(df["history_duties"], errors="coerce").fillna(0).astype(int)
+        df["history_weight"] = pd.to_numeric(df["history_weight"], errors="coerce").fillna(0.0)
+
+        st.session_state.students_df = df[required_cols].reset_index(drop=True)
+        st.success(f"🎉 AI 智能導入成功！已處理 {len(df)} 位領袖生（自動匹配欄位）")
+        st.rerun()
+
+    except Exception as e:
+        st.error(f"❌ AI 智能導入失敗: {str(e)}")
+        st.info("💡 提示：若 AI 無法解析，可使用傳統格式或檢查檔案是否損壞")
 
 # ==========================================
 # 2. 系統完整備份 / 還原
@@ -122,7 +215,6 @@ def generate_pdf(roster_df, master_report_df, logo_b64=None):
         st.error("❌ PDF 引擎未就緒，請確認 packages.txt 已加入 weasyprint 並重新部署")
         return None
 
-    # 如果沒有傳入 logo_b64，嘗試從 session_state 或 GitHub 檔案讀取
     if logo_b64 is None:
         if st.session_state.get("logo_data"):
             logo_b64 = base64.b64encode(st.session_state.logo_data).decode()
@@ -131,9 +223,9 @@ def generate_pdf(roster_df, master_report_df, logo_b64=None):
                 with open("logo.png", "rb") as f:
                     logo_data = f.read()
                     logo_b64 = base64.b64encode(logo_data).decode()
-                    st.session_state.logo_data = logo_data  # 存入 session_state
+                    st.session_state.logo_data = logo_data
             except FileNotFoundError:
-                logo_b64 = None  # 沒有 logo 就繼續生成 PDF
+                logo_b64 = None
 
     today = datetime.date.today().strftime("%Y-%m-%d")
     html_table = roster_df.to_html(classes='table')
