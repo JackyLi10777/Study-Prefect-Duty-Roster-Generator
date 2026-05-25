@@ -87,30 +87,13 @@ def render_sidebar():
             num_rows="dynamic", use_container_width=True, hide_index=True, key="student_editor_widget"
         )
 
-        # ==================== 新增：手動調整累計負荷 ====================
-        st.write("---")
-        st.subheader("🔧 手動調整累計負荷")
-        st.caption("可直接修改每位同學的歷史累計次數與點數")
-        load_df = st.session_state.students_df[["name", "history_duties", "history_weight"]].copy()
-        edited_load = st.data_editor(
-            load_df,
-            column_config={
-                "name": st.column_config.TextColumn("姓名", disabled=True),
-                "history_duties": st.column_config.NumberColumn("歷史累計(次)", min_value=0, step=1),
-                "history_weight": st.column_config.NumberColumn("歷史累計(點)", min_value=0.0, step=0.5)
-            },
-            num_rows="fixed", use_container_width=True, hide_index=True
-        )
-        # 同步回主資料框
-        st.session_state.students_df.loc[edited_load.index, ["history_duties", "history_weight"]] = edited_load[["history_duties", "history_weight"]]
-
         st.write("---")
         st.subheader("🤖 AI 智能解析")
-        if st.button("🚀 執行 AI 解析 Remarks", use_container_width=True):
-            with st.spinner("AI 解析中..."):
+        if st.button("🚀 執行 AI 解析 Remarks (DeepSeek V4)", use_container_width=True):
+            with st.spinner("DeepSeek V4 解析中..."):
                 updated_df = ai_parse_remarks(st.session_state.students_df)
                 st.session_state.students_df = updated_df
-                st.success("✅ AI 已自動更新固定值班、可用日子、職級等欄位")
+                st.success("✅ DeepSeek V4 AI 已自動更新所有欄位")
                 st.rerun()
 
         st.write("---")
