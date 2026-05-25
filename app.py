@@ -27,20 +27,60 @@ if 'leave_tracker_input' not in st.session_state:
     st.session_state.leave_tracker_input = []
 if 'master_report_df' not in st.session_state:
     st.session_state.master_report_df = pd.DataFrame()
-if 'manual_weights' not in st.session_state:   # 新增：手動調整負荷記錄
+if 'manual_weights' not in st.session_state:
     st.session_state.manual_weights = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)
 
 # ==========================================
-# 使用說明書
+# 使用說明書（大幅擴充 + 直接反饋功能）
 # ==========================================
 HELP_TEXT = """
-# 📖 Sing Yin Study Prefect Duty Roster 使用說明書  
-**版本**：v1.4 手動調整負荷版  
+# 📖 Sing Yin Secondary School Study Prefect Duty Roster 使用說明書  
+**版本**：v1.4 手動調整負荷 + Gemini AI 版  
 **更新日期**：2026 年 5 月 25 日  
 
-**新增功能**：手動調整每次值班的負荷點數（可針對每個房間/學生本次值班調整累計指數）
-
 **適用對象**：Study Prefect Team Advisor、Head Study Prefect、Assistant Head Study Prefect
+
+---
+
+### 系統主要功能
+1. **智能公平排班**：自動考慮歷史負荷、可用日子、老帶新（F.3 由 F.4/F.5 帶）、固定總值班、職級限制
+2. **老帶新機制**：系統會自動讀取名冊中的「年級」欄位進行判斷（F.3 為 junior）
+3. **AI 智能解析 Remarks**：使用 Gemini 1.5 Flash 自動理解中文備註，更新固定值班、可用日子、職級
+4. **手動調整負荷**：可針對每個崗位本次值班手動修改累計負荷點數（即時生效）
+5. **智慧替補推薦**：請假時自動推薦最合適的替補人員（按總負荷由低到高排序）
+6. **彩色 PDF 公告班表** + Excel + Markdown 多格式導出
+7. **Cloud 備份 / 還原**：解決 Streamlit Cloud 休眠重置問題
+8. **每日聖經金句** + 校徽顯示開關
+
+---
+
+### 操作流程（推薦）
+1. 側邊欄 → 上傳或載入名冊（或使用「一鍵載入官方示範名冊」）
+2. 側邊欄 → 點擊「🤖 AI 智能解析 Remarks」（強烈建議）
+3. 主畫面 → 設定特殊不開放時段 → 點擊「🚀 智能計算」生成排班
+4. 檢查提示 → 若有警告請修正
+5. （可選）使用「🔧 手動調整本次值班負荷指數」微調
+6. 點擊導出 PDF / Excel / Markdown / 備份
+
+---
+
+### 常見問題
+- **老帶新**：系統自動讀取名冊「年級」欄位，F.3 學生會被優先分配給 F.4/F.5 帶領。
+- **手動調整負荷**：在「🔧 手動調整本次值班負荷指數」區塊直接修改數字，系統會即時更新最終總計。
+- **PDF 顯示校徽**：側邊欄有「🖼️ 顯示校徽」開關，可隨時切換。
+- **備份還原**：每次生成排班後建議點擊「⬇️ 導出完整備份」。
+
+---
+
+### 📧 直接反饋給開發者
+如果您在使用過程中遇到任何問題、想提出建議，或需要客製化功能，請直接點擊下方按鈕寄信給我：
+
+[📧 點此直接寄信給開發者](mailto:s10777@syss.edu.hk?subject=Study%20Prefect%20Duty%20Roster%20反饋&body=您好，我是...%0A%0A問題描述：%0A%0A建議：)
+
+---
+
+**如有任何問題，歡迎隨時聯絡我！**  
+Sing Yin Secondary School Study Prefect Platform 開發團隊
 """
 
 def main():
@@ -50,7 +90,7 @@ def main():
     st.markdown(f'<p class="main-subtitle">F.3–F.5 Study Prefect Duty Platform | {VERSION}</p>', unsafe_allow_html=True)
     show_daily_verse()
 
-    with st.expander("📖 查看完整使用說明書"):
+    with st.expander("📖 查看完整使用說明書（含直接反饋）", expanded=False):
         st.markdown(HELP_TEXT)
 
     selected_closures = render_control_buttons()
@@ -59,7 +99,7 @@ def main():
     audit_results = validate_and_compute(st.session_state.roster_df, st.session_state.students_df, leave_students, st.session_state.manual_weights)
     st.session_state.master_report_df = audit_results["report_df"]
 
-    # 所有安全提示（完整）
+    # 安全提示（完整）
     if audit_results["typo"][0]:
         st.markdown('<div class="danger-alert"><b>⚠️ 數據不符警告：</b><br>' + '<br>'.join(audit_results["typo"][1]) + '</div>', unsafe_allow_html=True)
     if audit_results["duplicate"][0]:
@@ -76,7 +116,7 @@ def main():
     elif audit_results["vacuum"][0]:
         st.markdown('<div class="warning-alert"><b>💡 空缺提示：</b><br>' + '<br>'.join(audit_results["vacuum"][1]) + '</div>', unsafe_allow_html=True)
 
-    # ==================== 值班表預覽 + 手動修改 ====================
+    # 值班表預覽 + 手動修改
     st.write("---")
     st.subheader("📅 本週值班表")
     tab_view, tab_edit = st.tabs(["📅 視覺公告版（彩色）", "✏️ 手動修改版"])
@@ -111,11 +151,10 @@ def main():
             st.session_state.roster_df = edited_roster
             st.rerun()
 
-    # ==================== 手動調整負荷功能（新功能） ====================
+    # 手動調整負荷
     st.write("---")
     st.subheader("🔧 手動調整本次值班負荷指數")
     st.caption("針對每個崗位本次值班，手動修改累計負荷點數（調整後會即時更新最終總計）")
-
     manual_col = st.data_editor(
         st.session_state.manual_weights,
         use_container_width=True,
@@ -125,7 +164,7 @@ def main():
         st.session_state.manual_weights = manual_col
         st.rerun()
 
-    # ==================== 累計動態工作負荷審計表 ====================
+    # 累計審計表
     st.write("---")
     st.subheader("📊 累計動態工作負荷審計表（已包含手動調整）")
     if not st.session_state.master_report_df.empty:
@@ -133,7 +172,7 @@ def main():
     else:
         st.info("請先生成排班表以顯示審計表")
 
-    # ==================== 工作量圖表 ====================
+    # 工作量圖表
     if not st.session_state.master_report_df.empty:
         st.write("---")
         st.subheader("🦅 全體累積工作點數公平性動態監控")
@@ -147,7 +186,7 @@ def main():
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    # ==================== PDF + 多格式導出 ====================
+    # PDF + 多格式導出
     st.write("---")
     st.subheader("📤 導出功能")
     col1, col2, col3 = st.columns(3)
@@ -169,7 +208,7 @@ def main():
         md_data = "### 本週值班表\n\n" + st.session_state.roster_df.to_markdown() + "\n\n### 工作負荷統計\n\n" + st.session_state.master_report_df.to_markdown(index=False)
         st.download_button("📝 下載 Markdown (.md)", md_data.encode('utf-8'), f"SYSS_Roster_{datetime.date.today().strftime('%Y%m%d')}.md", use_container_width=True)
 
-    # ==================== 智慧替補 ====================
+    # 智慧替補
     st.write("---")
     st.subheader("🔍 智慧替補推薦")
     c1, c2 = st.columns(2)
