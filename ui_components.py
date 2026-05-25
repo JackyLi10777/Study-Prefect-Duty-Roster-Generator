@@ -7,14 +7,14 @@ import random
 
 from config import DAYS, ROWS_ROSTER, DAILY_VERSES, VERSION, APP_TITLE
 
-# 如果 config.py 中沒有 ALL_VERSES，則在這裡建立（防止 ImportError）
+# 確保 ALL_VERSES 存在（防止 ImportError）
 if "ALL_VERSES" not in globals():
     ALL_VERSES = []
     for day_list in DAILY_VERSES.values():
         ALL_VERSES.extend(day_list)
 
 from core import generate_roster
-from utils import process_roster_import, export_system_backup, import_system_backup
+from utils import process_roster_import, smart_process_roster_import, export_system_backup, import_system_backup
 from data import get_demo_dataframe, get_sample_format_dataframe
 from ai_parser import ai_parse_remarks
 
@@ -76,9 +76,18 @@ def render_sidebar():
                 sample_df.to_excel(writer, index=False)
             st.download_button("✅ 下載範例檔", output.getvalue(), "Prefect_名冊格式範例.xlsx", use_container_width=True)
 
+        # ==================== 傳統 + AI 智能導入 ====================
         uploaded_roster = st.file_uploader("上傳名冊 (Excel/CSV)", type=["csv", "xlsx", "xls"], key="roster_importer")
-        if uploaded_roster and st.button("確認導入", use_container_width=True):
-            process_roster_import(uploaded_roster)
+
+        col_trad, col_ai = st.columns(2)
+        with col_trad:
+            if uploaded_roster and st.button("📋 傳統格式導入", use_container_width=True):
+                process_roster_import(uploaded_roster)
+        with col_ai:
+            if uploaded_roster and st.button("🤖 AI 智能自動匹配", type="primary", use_container_width=True):
+                smart_process_roster_import(uploaded_roster)
+
+        st.caption("💡 AI 智能導入：支援任意欄位名稱與順序，無需固定格式")
 
         st.write("---")
         st.subheader("👥 名冊即時修改")
@@ -104,7 +113,7 @@ def render_sidebar():
             with st.spinner("AI 解析中..."):
                 updated_df = ai_parse_remarks(st.session_state.students_df)
                 st.session_state.students_df = updated_df
-                st.success("✅ AI 已自動更新固定值班、可用日子、職級等欄位")
+                st.success("✅ AI 已自動更新")
                 st.rerun()
 
         st.write("---")
