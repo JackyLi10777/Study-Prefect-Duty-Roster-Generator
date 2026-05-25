@@ -5,7 +5,7 @@ import datetime
 # 系統基本常數
 # ==========================================
 APP_TITLE = "Sing Yin Study Prefect Duty Roster"
-VERSION = "v1.4 手動調整負荷 + DeepSeek AI 版"
+VERSION = "v2.0"
 
 DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY']
 
@@ -96,7 +96,7 @@ DAILY_VERSES = {
     ]
 }
 
-# ==========================================
-# 其他常數（保持不變）
-# ==========================================
-# 如果需要新增更多常數，請告訴我
+# 所有金句合併成一個大列表，方便隨機刷新使用
+ALL_VERSES = []
+for day_list in DAILY_VERSES.values():
+    ALL_VERSES.extend(day_list)
