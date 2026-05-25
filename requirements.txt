@@ -10,7 +10,9 @@ tinycss2>=1.2.1
 cssselect2>=0.7.0
 torch
 transformers
-google-generativeai
+openai>=1.0.0
 tabulate
 black>=24.0.0
 flake8>=7.0.0
+numpy>=1.26.0
+matplotlib>=3.8.0
