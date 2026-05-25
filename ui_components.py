@@ -25,7 +25,7 @@ def render_sidebar():
     with st.sidebar:
         st.header("🏫 Sing Yin Secondary School")
         
-        # 校徽顯示開關 + GitHub 預設
+        # ==================== 校徽顯示控制 ====================
         show_logo = st.checkbox("🖼️ 顯示校徽（畫面與 PDF）", value=True, key="show_logo_toggle")
         
         uploaded_logo = st.file_uploader("上傳自訂校徽 (PNG)（可選）", type=["png"], key="logo_uploader")
@@ -86,6 +86,23 @@ def render_sidebar():
             },
             num_rows="dynamic", use_container_width=True, hide_index=True, key="student_editor_widget"
         )
+
+        # ==================== 新增：手動調整累計負荷 ====================
+        st.write("---")
+        st.subheader("🔧 手動調整累計負荷")
+        st.caption("可直接修改每位同學的歷史累計次數與點數")
+        load_df = st.session_state.students_df[["name", "history_duties", "history_weight"]].copy()
+        edited_load = st.data_editor(
+            load_df,
+            column_config={
+                "name": st.column_config.TextColumn("姓名", disabled=True),
+                "history_duties": st.column_config.NumberColumn("歷史累計(次)", min_value=0, step=1),
+                "history_weight": st.column_config.NumberColumn("歷史累計(點)", min_value=0.0, step=0.5)
+            },
+            num_rows="fixed", use_container_width=True, hide_index=True
+        )
+        # 同步回主資料框
+        st.session_state.students_df.loc[edited_load.index, ["history_duties", "history_weight"]] = edited_load[["history_duties", "history_weight"]]
 
         st.write("---")
         st.subheader("🤖 AI 智能解析")
