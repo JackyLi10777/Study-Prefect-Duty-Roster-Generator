@@ -7,7 +7,7 @@ import io
 import json
 import base64
 
-from config import DAYS, ROWS_ROSTER, VERSION, APP_TITLE, DAILY_VERSES
+from config import DAYS, ROWS_ROSTER, VERSION, APP_TITLE
 from core import validate_and_compute, recommend_substitutes
 from utils import generate_pdf, export_system_backup, import_system_backup, process_roster_import
 from ui_components import render_sidebar, show_daily_verse, render_control_buttons
@@ -30,64 +30,24 @@ if 'master_report_df' not in st.session_state:
 if 'manual_weights' not in st.session_state:
     st.session_state.manual_weights = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)
 
-# ==========================================
-# 使用說明書（完整版 + 直接反饋）
-# ==========================================
-HELP_TEXT = """
-# 📖 Sing Yin Secondary School Study Prefect Duty Roster 使用說明書  
-**版本**：v2.0  
-**更新日期**：2026 年 5 月 25 日  
-
-**適用對象**：Study Prefect Team Advisor、Head Study Prefect、Assistant Head Study Prefect
-
----
-
-### 系統主要功能
-1. **智能公平排班**：自動考慮歷史負荷、可用日子、老帶新、固定總值班
-2. **老帶新機制**：自動讀取名冊中的「年級」欄位進行判斷
-3. **AI 智能解析 Remarks**：使用 Gemini 3.5 Flash 自動理解中文備註
-4. **手動調整負荷**：可針對每個崗位本次值班手動修改累計負荷點數
-5. **智慧替補推薦**：請假時自動推薦最適合人員
-6. **彩色 PDF 公告班表** + Excel + Markdown 導出
-7. **Cloud 備份 / 還原**：解決 Streamlit Cloud 休眠問題
-8. **每日聖經金句** + 刷新金句功能 + 校徽顯示開關
-
----
-
-### 操作流程
-1. 側邊欄 → 載入或編輯名冊
-2. 側邊欄 → 執行 AI 解析 Remarks（強烈建議）
-3. 主畫面 → 設定特殊不開放時段 → 點擊生成排班
-4. 使用「🔧 手動調整本次值班負荷指數」微調
-5. 導出 PDF / Excel / Markdown / 備份
-
----
-
-### 📧 直接反饋給開發者
-[📧 點此直接寄信給開發者](mailto:s10777@syss.edu.hk?subject=Study%20Prefect%20Duty%20Roster%20反饋&body=您好，我是...%0A%0A問題描述：%0A%0A建議：)
-
----
-
-**如有任何問題，歡迎隨時聯絡我！**
-"""
-
 def main():
+    # 側邊欄只放管理功能
     render_sidebar()
 
+    # 主畫面標題與金句
     st.markdown(f'<p class="main-title">{APP_TITLE}</p>', unsafe_allow_html=True)
     st.markdown(f'<p class="main-subtitle">F.3–F.5 Study Prefect Duty Platform | {VERSION}</p>', unsafe_allow_html=True)
     show_daily_verse()
 
-    with st.expander("📖 查看完整使用說明書（含直接反饋）", expanded=False):
-        st.markdown(HELP_TEXT)
-
+    # 常用功能集中在主畫面
+    st.write("---")
     selected_closures = render_control_buttons()
 
+    # 驗證與提示
     leave_students = st.session_state.leave_tracker_input
     audit_results = validate_and_compute(st.session_state.roster_df, st.session_state.students_df, leave_students, st.session_state.manual_weights)
     st.session_state.master_report_df = audit_results["report_df"]
 
-    # 安全提示
     if audit_results["typo"][0]:
         st.markdown('<div class="danger-alert"><b>⚠️ 數據不符警告：</b><br>' + '<br>'.join(audit_results["typo"][1]) + '</div>', unsafe_allow_html=True)
     if audit_results["duplicate"][0]:
@@ -104,10 +64,10 @@ def main():
     elif audit_results["vacuum"][0]:
         st.markdown('<div class="warning-alert"><b>💡 空缺提示：</b><br>' + '<br>'.join(audit_results["vacuum"][1]) + '</div>', unsafe_allow_html=True)
 
-    # 值班表
+    # 值班表（最常用）
     st.write("---")
     st.subheader("📅 本週值班表")
-    tab_view, tab_edit = st.tabs(["📅 視覺公告版（彩色）", "✏️ 手動修改版"])
+    tab_view, tab_edit = st.tabs(["📅 視覺公告版", "✏️ 手動修改版"])
 
     def apply_cell_style(val, role, day):
         val = str(val).strip()
@@ -129,7 +89,7 @@ def main():
         st.dataframe(styled, use_container_width=True, height=320)
 
     with tab_edit:
-        st.markdown("<p style='font-size:13px; color:#666;'>💡 直接在下方表格修改人名或打 X 鎖定</p>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size:13px; color:#666;'>💡 直接修改人名或打 X 鎖定</p>", unsafe_allow_html=True)
         edited_roster = st.data_editor(
             st.session_state.roster_df,
             use_container_width=True,
@@ -139,10 +99,10 @@ def main():
             st.session_state.roster_df = edited_roster
             st.rerun()
 
-    # 手動調整負荷
+    # 手動調整負荷（常用功能）
     st.write("---")
     st.subheader("🔧 手動調整本次值班負荷指數")
-    st.caption("針對每個崗位本次值班，手動修改累計負荷點數")
+    st.caption("直接修改每個崗位的累計負荷點數")
     manual_col = st.data_editor(
         st.session_state.manual_weights,
         use_container_width=True,
@@ -152,18 +112,17 @@ def main():
         st.session_state.manual_weights = manual_col
         st.rerun()
 
-    # 累計審計表
+    # 累計審計表與圖表
     st.write("---")
     st.subheader("📊 累計動態工作負荷審計表")
     if not st.session_state.master_report_df.empty:
         st.dataframe(st.session_state.master_report_df, use_container_width=True, hide_index=True)
     else:
-        st.info("請先生成排班表以顯示審計表")
+        st.info("請先生成排班表")
 
-    # 工作量圖表
     if not st.session_state.master_report_df.empty:
         st.write("---")
-        st.subheader("🦅 全體累積工作點數公平性動態監控")
+        st.subheader("🦅 全體累積工作點數公平性監控")
         fig = px.bar(
             st.session_state.master_report_df,
             x='學生姓名 (Prefect Name)',
@@ -174,29 +133,7 @@ def main():
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    # PDF + 多格式導出
-    st.write("---")
-    st.subheader("📤 導出功能")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button("📄 匯出 A4 橫式公告 PDF", use_container_width=True):
-            logo_b64 = base64.b64encode(st.session_state.logo_data).decode() if st.session_state.get("logo_data") else None
-            pdf_bytes = generate_pdf(st.session_state.roster_df, st.session_state.master_report_df, logo_b64)
-            if pdf_bytes:
-                st.download_button("💾 下載 PDF", pdf_bytes, f"SYSS_Roster_{datetime.date.today().strftime('%Y%m%d')}.pdf", "application/pdf", use_container_width=True)
-
-    with col2:
-        output_excel = io.BytesIO()
-        with pd.ExcelWriter(output_excel, engine='openpyxl') as writer:
-            st.session_state.roster_df.to_excel(writer, sheet_name='本週值班表')
-            st.session_state.master_report_df.to_excel(writer, sheet_name='工作負荷統計', index=False)
-        st.download_button("📊 下載 Excel (.xlsx)", output_excel.getvalue(), f"SYSS_Prefect_Roster_{datetime.date.today().strftime('%Y%m%d')}.xlsx", use_container_width=True)
-
-    with col3:
-        md_data = "### 本週值班表\n\n" + st.session_state.roster_df.to_markdown() + "\n\n### 工作負荷統計\n\n" + st.session_state.master_report_df.to_markdown(index=False)
-        st.download_button("📝 下載 Markdown (.md)", md_data.encode('utf-8'), f"SYSS_Roster_{datetime.date.today().strftime('%Y%m%d')}.md", use_container_width=True)
-
-    # 智慧替補
+    # 智慧替補（常用）
     st.write("---")
     st.subheader("🔍 智慧替補推薦")
     c1, c2 = st.columns(2)
@@ -211,6 +148,26 @@ def main():
             st.dataframe(sub_df, use_container_width=True, hide_index=True)
         else:
             st.warning(msg)
+
+    # 快速導出
+    st.write("---")
+    st.subheader("📤 快速導出")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("📄 匯出 PDF", use_container_width=True):
+            logo_b64 = base64.b64encode(st.session_state.logo_data).decode() if st.session_state.get("logo_data") else None
+            pdf_bytes = generate_pdf(st.session_state.roster_df, st.session_state.master_report_df, logo_b64)
+            if pdf_bytes:
+                st.download_button("💾 下載 PDF", pdf_bytes, f"SYSS_Roster_{datetime.date.today().strftime('%Y%m%d')}.pdf", "application/pdf", use_container_width=True)
+    with col2:
+        output_excel = io.BytesIO()
+        with pd.ExcelWriter(output_excel, engine='openpyxl') as writer:
+            st.session_state.roster_df.to_excel(writer, sheet_name='本週值班表')
+            st.session_state.master_report_df.to_excel(writer, sheet_name='工作負荷統計', index=False)
+        st.download_button("📊 下載 Excel", output_excel.getvalue(), f"SYSS_Roster_{datetime.date.today().strftime('%Y%m%d')}.xlsx", use_container_width=True)
+    with col3:
+        md_data = "### 本週值班表\n\n" + st.session_state.roster_df.to_markdown() + "\n\n### 工作負荷統計\n\n" + st.session_state.master_report_df.to_markdown(index=False)
+        st.download_button("📝 下載 Markdown", md_data.encode('utf-8'), f"SYSS_Roster_{datetime.date.today().strftime('%Y%m%d')}.md", use_container_width=True)
 
     st.caption(f"Sing Yin Secondary School Study Prefect Platform | {VERSION}")
 
