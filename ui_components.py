@@ -11,15 +11,27 @@ from utils import process_roster_import, export_system_backup, import_system_bac
 from data import get_demo_dataframe, get_sample_format_dataframe
 from ai_parser import ai_parse_remarks
 
+# 所有金句合併成一個大列表（方便隨機刷新）
+ALL_VERSES = []
+for day_list in DAILY_VERSES.values():
+    ALL_VERSES.extend(day_list)
+
 def show_daily_verse():
-    today = datetime.date.today().weekday()
-    verse = DAILY_VERSES.get(today, DAILY_VERSES[0])
+    # 使用 session_state 記住當前顯示的金句
+    if "current_verse" not in st.session_state or st.session_state.current_verse is None:
+        st.session_state.current_verse = random.choice(ALL_VERSES)
+
     st.markdown(f"""
     <div style="background:#F8F1E3;padding:20px;border-radius:12px;margin:20px 0;text-align:center;border-left:6px solid #D4AF37;">
         <h4 style="margin:0 0 8px 0;color:#0C2340;">📖 今日聖經金句</h4>
-        <p style="font-size:16px;margin:0;color:#333;line-height:1.5;">{verse}</p>
+        <p style="font-size:16px;margin:0;color:#333;line-height:1.5;">{st.session_state.current_verse}</p>
     </div>
     """, unsafe_allow_html=True)
+
+    # 新增刷新金句按鈕
+    if st.button("🔄 刷新金句", use_container_width=True):
+        st.session_state.current_verse = random.choice(ALL_VERSES)
+        st.rerun()
 
 def render_sidebar():
     with st.sidebar:
