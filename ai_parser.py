@@ -33,7 +33,8 @@ SYSTEM_PROMPT = """
 }
 
 解析規則：
-- 如果備註提到「固定週一總值班」、「每週一值班」→ fixed_general_duty = "MONDAY"
+- 如果備註提到「固定週一總值班」、「每週一值班」、「週一總值班」→ fixed_general_duty = "MONDAY"
+- 如果提到「固定週二」→ "TUESDAY"，以此類推
 - 如果提到「隊長」、「Assistant Head」、「副隊長」→ role = "Assistant Head Study Prefect"
 - 如果沒有提到固定值班 → "NONE"
 - 可用日子請盡量完整推斷，沒有提到的日子預設全可用
