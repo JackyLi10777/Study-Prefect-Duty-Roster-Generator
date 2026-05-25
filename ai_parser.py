@@ -3,22 +3,26 @@ import streamlit as st
 import pandas as pd
 import json
 import time
-from openai import OpenAI
+import google.generativeai as genai
 
 # ==========================================
-# Groq 配置（2026 年 5 月最新推薦）
+# Google Gemini 3.5 Flash 配置（2026 年 5 月最新版）
 # ==========================================
-if "GROQ_API_KEY" not in st.secrets:
-    st.error("❌ 未找到 GROQ_API_KEY，請在 .streamlit/secrets.toml 中新增 GROQ_API_KEY")
-    client = None
+if "GEMINI_API_KEY" not in st.secrets:
+    st.error("❌ 未找到 GEMINI_API_KEY，請在 .streamlit/secrets.toml 中新增 GEMINI_API_KEY")
+    genai.configure(api_key=None)
 else:
-    client = OpenAI(
-        api_key=st.secrets["GROQ_API_KEY"],
-        base_url="https://api.groq.com/openai/v1"
-    )
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# 使用 Groq 最強免費高速模型
-MODEL_NAME = "llama3-70b-8192"
+model = genai.GenerativeModel(
+    model_name="gemini-3.5-flash",   # 2026 年 5 月最新穩定版
+    generation_config={
+        "temperature": 0.3,
+        "top_p": 0.95,
+        "top_k": 40,
+        "max_output_tokens": 2048,
+    }
+)
 
 SYSTEM_PROMPT = """
 你是一位 Sing Yin Secondary School Study Prefect Team 的資深管理員。
@@ -45,8 +49,8 @@ def ai_parse_remarks(students_df: pd.DataFrame) -> pd.DataFrame:
         st.warning("名冊為空，無法進行 AI 解析")
         return students_df
 
-    if client is None:
-        st.error("Groq API 未正確配置，請檢查 secrets.toml")
+    if not genai.configure or "GEMINI_API_KEY" not in st.secrets:
+        st.error("Gemini API 未正確配置，請檢查 secrets.toml")
         return students_df
 
     df = students_df.copy()
@@ -59,20 +63,13 @@ def ai_parse_remarks(students_df: pd.DataFrame) -> pd.DataFrame:
         if not remarks or remarks.lower() in ["nan", "", "none"]:
             continue
 
-        status_text.text(f"Groq AI 正在解析第 {idx+1} 位學生：{row.get('name', '未知')}")
+        status_text.text(f"Gemini 3.5 Flash 正在解析第 {idx+1} 位學生：{row.get('name', '未知')}")
 
         try:
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": f"學生備註：{remarks}\n請直接輸出 JSON："}
-                ],
-                temperature=0.3,
-                max_tokens=800
+            response = model.generate_content(
+                f"{SYSTEM_PROMPT}\n\n學生備註：{remarks}\n\n請直接輸出 JSON："
             )
-
-            json_text = response.choices[0].message.content.strip()
+            json_text = response.text.strip()
 
             # 清理可能的 markdown 包裹
             if json_text.startswith("```json"):
@@ -94,10 +91,10 @@ def ai_parse_remarks(students_df: pd.DataFrame) -> pd.DataFrame:
 
         except Exception as e:
             st.warning(f"第 {idx+1} 位學生解析失敗: {str(e)}")
-            time.sleep(0.3)
+            time.sleep(0.5)
 
         progress_bar.progress((idx + 1) / len(df))
 
     progress_bar.empty()
-    status_text.success("✅ Groq AI 解析完成！所有欄位已自動更新")
+    status_text.success("✅ Gemini 3.5 Flash AI 解析完成！所有欄位已自動更新")
     return df
