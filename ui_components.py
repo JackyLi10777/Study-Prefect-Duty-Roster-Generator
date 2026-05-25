@@ -25,7 +25,7 @@ def render_sidebar():
     with st.sidebar:
         st.header("🏫 Sing Yin Secondary School")
         
-        # ==================== 校徽顯示控制 ====================
+        # 校徽顯示開關
         show_logo = st.checkbox("🖼️ 顯示校徽（畫面與 PDF）", value=True, key="show_logo_toggle")
         
         uploaded_logo = st.file_uploader("上傳自訂校徽 (PNG)（可選）", type=["png"], key="logo_uploader")
@@ -89,11 +89,11 @@ def render_sidebar():
 
         st.write("---")
         st.subheader("🤖 AI 智能解析")
-        if st.button("🚀 執行 AI 解析 Remarks (DeepSeek V4)", use_container_width=True):
-            with st.spinner("DeepSeek V4 解析中..."):
+        if st.button("🚀 執行 AI 解析 Remarks", use_container_width=True):
+            with st.spinner("AI 解析中..."):
                 updated_df = ai_parse_remarks(st.session_state.students_df)
                 st.session_state.students_df = updated_df
-                st.success("✅ DeepSeek V4 AI 已自動更新所有欄位")
+                st.success("✅ AI 已自動更新固定值班、可用日子、職級等欄位")
                 st.rerun()
 
         st.write("---")
