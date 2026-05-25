@@ -31,11 +31,11 @@ if 'manual_weights' not in st.session_state:
     st.session_state.manual_weights = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)
 
 # ==========================================
-# 使用說明書（大幅擴充 + 直接反饋功能）
+# 使用說明書（最完整版 + 直接反饋）
 # ==========================================
 HELP_TEXT = """
 # 📖 Sing Yin Secondary School Study Prefect Duty Roster 使用說明書  
-**版本**：v1.4 手動調整負荷 + Gemini AI 版  
+**版本**：v1.4 手動調整負荷 + DeepSeek V4 AI 版  
 **更新日期**：2026 年 5 月 25 日  
 
 **適用對象**：Study Prefect Team Advisor、Head Study Prefect、Assistant Head Study Prefect
@@ -45,30 +45,21 @@ HELP_TEXT = """
 ### 系統主要功能
 1. **智能公平排班**：自動考慮歷史負荷、可用日子、老帶新（F.3 由 F.4/F.5 帶）、固定總值班、職級限制
 2. **老帶新機制**：系統會自動讀取名冊中的「年級」欄位進行判斷（F.3 為 junior）
-3. **AI 智能解析 Remarks**：使用 Gemini 1.5 Flash 自動理解中文備註，更新固定值班、可用日子、職級
+3. **AI 智能解析 Remarks**：使用 DeepSeek V4 自動理解中文備註，更新固定值班、可用日子、職級
 4. **手動調整負荷**：可針對每個崗位本次值班手動修改累計負荷點數（即時生效）
-5. **智慧替補推薦**：請假時自動推薦最合適的替補人員（按總負荷由低到高排序）
+5. **智慧替補推薦**：請假時自動推薦最合適的替補人員
 6. **彩色 PDF 公告班表** + Excel + Markdown 多格式導出
 7. **Cloud 備份 / 還原**：解決 Streamlit Cloud 休眠重置問題
 8. **每日聖經金句** + 校徽顯示開關
 
 ---
 
-### 操作流程（推薦）
-1. 側邊欄 → 上傳或載入名冊（或使用「一鍵載入官方示範名冊」）
+### 操作流程
+1. 側邊欄 → 上傳或載入名冊
 2. 側邊欄 → 點擊「🤖 AI 智能解析 Remarks」（強烈建議）
-3. 主畫面 → 設定特殊不開放時段 → 點擊「🚀 智能計算」生成排班
-4. 檢查提示 → 若有警告請修正
-5. （可選）使用「🔧 手動調整本次值班負荷指數」微調
-6. 點擊導出 PDF / Excel / Markdown / 備份
-
----
-
-### 常見問題
-- **老帶新**：系統自動讀取名冊「年級」欄位，F.3 學生會被優先分配給 F.4/F.5 帶領。
-- **手動調整負荷**：在「🔧 手動調整本次值班負荷指數」區塊直接修改數字，系統會即時更新最終總計。
-- **PDF 顯示校徽**：側邊欄有「🖼️ 顯示校徽」開關，可隨時切換。
-- **備份還原**：每次生成排班後建議點擊「⬇️ 導出完整備份」。
+3. 主畫面 → 設定特殊不開放時段 → 點擊生成排班
+4. 使用「🔧 手動調整本次值班負荷指數」微調
+5. 導出 PDF / Excel / Markdown / 備份
 
 ---
 
@@ -99,7 +90,7 @@ def main():
     audit_results = validate_and_compute(st.session_state.roster_df, st.session_state.students_df, leave_students, st.session_state.manual_weights)
     st.session_state.master_report_df = audit_results["report_df"]
 
-    # 安全提示（完整）
+    # 安全提示
     if audit_results["typo"][0]:
         st.markdown('<div class="danger-alert"><b>⚠️ 數據不符警告：</b><br>' + '<br>'.join(audit_results["typo"][1]) + '</div>', unsafe_allow_html=True)
     if audit_results["duplicate"][0]:
