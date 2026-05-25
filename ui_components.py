@@ -12,7 +12,6 @@ from data import get_demo_dataframe, get_sample_format_dataframe
 from ai_parser import ai_parse_remarks
 
 def show_daily_verse():
-    # 使用 session_state 記住目前顯示的金句
     if "current_verse" not in st.session_state or st.session_state.current_verse is None:
         st.session_state.current_verse = random.choice(ALL_VERSES)
 
@@ -23,18 +22,14 @@ def show_daily_verse():
     </div>
     """, unsafe_allow_html=True)
 
-    # 刷新金句按鈕
-    col1, col2 = st.columns([1, 4])
-    with col1:
-        if st.button("🔄 刷新金句", use_container_width=True):
-            st.session_state.current_verse = random.choice(ALL_VERSES)
-            st.rerun()
+    if st.button("🔄 刷新金句", use_container_width=True):
+        st.session_state.current_verse = random.choice(ALL_VERSES)
+        st.rerun()
 
 def render_sidebar():
     with st.sidebar:
         st.header("🏫 Sing Yin Secondary School")
         
-        # 校徽顯示開關
         show_logo = st.checkbox("🖼️ 顯示校徽（畫面與 PDF）", value=True, key="show_logo_toggle")
         
         uploaded_logo = st.file_uploader("上傳自訂校徽 (PNG)（可選）", type=["png"], key="logo_uploader")
@@ -102,7 +97,7 @@ def render_sidebar():
             with st.spinner("AI 解析中..."):
                 updated_df = ai_parse_remarks(st.session_state.students_df)
                 st.session_state.students_df = updated_df
-                st.success("✅ AI 已自動更新固定值班、可用日子、職級等欄位")
+                st.success("✅ AI 已自動更新")
                 st.rerun()
 
         st.write("---")
@@ -122,37 +117,3 @@ def render_sidebar():
             import_system_backup(uploaded_backup)
 
         st.caption("💡 每次生成班表後建議立即備份")
-
-def render_control_buttons():
-    closure_options = [f"{d} - {room}" for d in DAYS for room in ["Room302", "Room303", "Room202"] if not (room == "Room202" and d in ["TUESDAY", "FRIDAY"])]
-    selected_closures = st.multiselect("🛠️ 本週特殊不開放時段", options=closure_options, key="special_closures")
-
-    col1, col2, col3 = st.columns([2, 1.5, 1.5])
-    with col1:
-        if st.button("🚀 智能計算：生成本週全新公平值班表", type="primary", use_container_width=True):
-            with st.spinner("計算中..."):
-                seed = random.randint(10000, 99999)
-                st.session_state.roster_df = generate_roster(
-                    st.session_state.students_df, 
-                    st.session_state.leave_tracker_input, 
-                    selected_closures, 
-                    seed
-                )
-                st.success(f"✅ 排班完成！驗證碼: SY-{seed}")
-
-    with col2:
-        if st.button("🗑️ 一鍵清空本週排班", type="secondary", use_container_width=True):
-            st.session_state.show_clear_confirm = True
-
-    if st.session_state.get("show_clear_confirm", False):
-        st.markdown('<div class="warning-alert"><b>⚠️ 確定要清除全部排班？此操作無法復原！</b></div>', unsafe_allow_html=True)
-        c1, c2 = st.columns(2)
-        if c1.button("💥 確定清空", type="primary"):
-            st.session_state.roster_df = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
-            st.session_state.show_clear_confirm = False
-            st.rerun()
-        if c2.button("❌ 取消"):
-            st.session_state.show_clear_confirm = False
-            st.rerun()
-
-    return selected_closures
