@@ -71,7 +71,7 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
                 new_roster.at[role, day] = ""
                 continue
 
-            # 強化老帶新機制（真正根據年級判斷）
+            # ==================== 強化老帶新機制 ====================
             partner_is_junior = False
             if "- 2" in role:
                 partner_role = role.replace("- 2", "- 1")
@@ -90,7 +90,7 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
                     continue
 
                 form_str = student_form_map.get(name, "")
-                # 老帶新嚴格判斷：F.3 不能帶 F.3，必須由 F.4/F.5 帶
+                # 老帶新嚴格判斷：F.3 不能帶 F.3，必須由 F.4/F.5 帶 F.3
                 if partner_is_junior and "3" in form_str:
                     continue
 
@@ -125,9 +125,6 @@ def generate_roster(students_df: pd.DataFrame, leave_students: list, special_clo
     return new_roster
 
 def validate_and_compute(roster_df: pd.DataFrame, students_df: pd.DataFrame, leave_students: list, manual_weights: pd.DataFrame = None):
-    if manual_weights is None:
-        manual_weights = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)
-
     valid_names = set(str(name).strip() for name in students_df["name"].dropna() if str(name).strip())
     typo_detected = False
     vacuum_detected = False
@@ -178,9 +175,7 @@ def validate_and_compute(roster_df: pd.DataFrame, students_df: pd.DataFrame, lea
             for d in DAYS:
                 for r in ROWS_ROSTER:
                     if str(roster_df.at[r, d]).strip() == name:
-                        base_w = WEIGHTS.get(r, 1.0)
-                        manual_w = float(manual_weights.at[r, d]) if r in manual_weights.index and d in manual_weights.columns else 0.0
-                        this_week_weight += base_w + manual_w
+                        this_week_weight += WEIGHTS.get(r, 1.0)
                         this_week_duties += 1
                         
         final_records.append({
