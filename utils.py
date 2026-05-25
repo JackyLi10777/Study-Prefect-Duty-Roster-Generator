@@ -7,13 +7,14 @@ import datetime
 import base64
 
 # ==========================================
-# PDF 支援強固檢查
+# 0. PDF 支援強固檢查（Streamlit Cloud 專用）
 # ==========================================
 try:
     from weasyprint import HTML
     PDF_AVAILABLE = True
-except (ImportError, OSError, Exception):
+except (ImportError, OSError, Exception) as e:
     PDF_AVAILABLE = False
+    st.warning("⚠️ WeasyPrint 未就緒（PDF 功能暫時無法使用）。請確認 GitHub 已加入 packages.txt 並重新部署。")
 
 # ==========================================
 # 1. 名冊導入引擎（完整版）
@@ -61,14 +62,14 @@ def process_roster_import(uploaded_file):
         st.sidebar.error(f"❌ 導入失敗: {str(e)}")
 
 # ==========================================
-# 2. 系統完整備份 / 還原
+# 2. 系統完整備份 / 還原（支援手動調整負荷）
 # ==========================================
 def export_system_backup(master_df):
     backup_data = {
         "master_report": master_df.to_dict(orient="records"),
         "roster_table": st.session_state.roster_df.to_dict(orient="index"),
-        "leave_tracker": st.session_state.leave_tracker_input,
-        "manual_weights": st.session_state.get("manual_weights", pd.DataFrame(index=ROWS_ROSTER, columns=DAYS)).to_dict(orient="index")
+        "manual_weights": st.session_state.get("manual_weights", pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)).to_dict(orient="index"),
+        "leave_tracker": st.session_state.leave_tracker_input
     }
     return json.dumps(backup_data, ensure_ascii=False, indent=2)
 
@@ -100,10 +101,13 @@ def import_system_backup(uploaded_json_file):
             
             restored_roster = pd.DataFrame.from_dict(data["roster_table"], orient="index")
             st.session_state.roster_df = restored_roster.reindex(index=ROWS_ROSTER, columns=DAYS).fillna("")
-            st.session_state.leave_tracker_input = data.get("leave_tracker", [])
+            
             if "manual_weights" in data:
-                st.session_state.manual_weights = pd.DataFrame.from_dict(data["manual_weights"], orient="index")
-            st.sidebar.success("🔮 備份已完美還原！")
+                manual_df = pd.DataFrame.from_dict(data["manual_weights"], orient="index")
+                st.session_state.manual_weights = manual_df.reindex(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)
+            
+            st.session_state.leave_tracker_input = data.get("leave_tracker", [])
+            st.sidebar.success("🔮 備份已完美還原（包含手動調整負荷）！")
             st.rerun()
         else:
             st.sidebar.error("❌ 備份檔結構不符")
@@ -111,7 +115,7 @@ def import_system_backup(uploaded_json_file):
         st.sidebar.error(f"❌ 還原失敗: {str(e)}")
 
 # ==========================================
-# 3. A4 橫式 PDF 生成引擎（完整版）
+# 3. A4 橫式 PDF 生成引擎（完整版 + 手動負荷支援）
 # ==========================================
 def generate_pdf(roster_df, master_report_df, logo_b64=None):
     if not PDF_AVAILABLE:
