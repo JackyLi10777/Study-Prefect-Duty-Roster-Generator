@@ -8,10 +8,8 @@ def generate_roster(students_df, leave_students, special_closures, seed):
     random.seed(seed)
     roster = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
 
-    # 轉換請假名單為集合（加速查詢）
     leave_set = set(str(name).strip() for name in leave_students if str(name).strip())
 
-    # 建立學生可用資訊快取
     student_info = {}
     for _, row in students_df.iterrows():
         name = str(row["name"]).strip()
@@ -25,23 +23,18 @@ def generate_roster(students_df, leave_students, special_closures, seed):
             "history_weight": float(row.get("history_weight", 0.0))
         }
 
-    # 建立最後值班紀錄（避免連續值班）
     last_duty_day = {name: -1 for name in student_info.keys()}
 
-    # 逐日逐崗位分配
     for day_idx, day in enumerate(DAYS):
         for role in ROWS_ROSTER:
-            # 檢查是否為特殊不開放時段
             if any(f"{day} - {role}" in sc for sc in special_closures):
                 roster.at[role, day] = "X"
                 continue
 
-            # Room202 在星期二、五預設不開放
             if "Room202" in role and day in ["TUESDAY", "FRIDAY"]:
                 roster.at[role, day] = "X"
                 continue
 
-            # 優先處理固定值班
             assigned = False
             for name, info in student_info.items():
                 if info["fixed"] == day and name not in leave_set:
@@ -53,21 +46,18 @@ def generate_roster(students_df, leave_students, special_closures, seed):
             if assigned:
                 continue
 
-            # 正常公平分配
             candidates = []
             for name, info in student_info.items():
                 if name in leave_set:
                     continue
                 if day not in info["available"]:
                     continue
-                if last_duty_day.get(name, -1) == day_idx - 1:  # 避免連續值班
+                if last_duty_day.get(name, -1) == day_idx - 1:
                     continue
 
-                # 老帶新機制（F.3 優先配 F.4/F.5）
                 is_junior = info["form"] == "F.3"
                 score = info["history_weight"] + random.uniform(0, 0.3)
 
-                # 職級優先（Assistant Head Study Prefect 優先派 Assist 崗位）
                 if "Assist" in role and info["role"] == "Assistant Head Study Prefect":
                     score -= 5.0
 
@@ -77,7 +67,6 @@ def generate_roster(students_df, leave_students, special_closures, seed):
                 roster.at[role, day] = ""
                 continue
 
-            # 排序：總負荷低者優先，老帶新加分
             candidates.sort(key=lambda x: (x[0], -x[2]))
             chosen = candidates[0][1]
 
@@ -96,8 +85,8 @@ def validate_and_compute(roster_df, students_df, leave_students, manual_weights)
         "vacuum": (False, [])
     }
 
-    # 1. 姓名驗證（typo）
     valid_names = set(str(row["name"]).strip() for _, row in students_df.iterrows() if str(row["name"]).strip())
+
     for day in DAYS:
         for role in ROWS_ROSTER:
             person = str(roster_df.at[role, day]).strip()
@@ -105,7 +94,6 @@ def validate_and_compute(roster_df, students_df, leave_students, manual_weights)
                 errors["typo"][1].append(f"{day} - {role}: {person}（姓名不在名冊中）")
                 errors["typo"] = (True, errors["typo"][1])
 
-    # 2. 重複排班檢查
     assigned = {}
     for day in DAYS:
         for role in ROWS_ROSTER:
@@ -117,7 +105,6 @@ def validate_and_compute(roster_df, students_df, leave_students, manual_weights)
                 else:
                     assigned[person] = f"{day}-{role}"
 
-    # 3. 請假衝突
     leave_set = set(str(name).strip() for name in leave_students if str(name).strip())
     for day in DAYS:
         for role in ROWS_ROSTER:
@@ -126,7 +113,6 @@ def validate_and_compute(roster_df, students_df, leave_students, manual_weights)
                 errors["leave_conflict"][1].append(f"{day} - {role}: {person} 已請假但仍排班")
                 errors["leave_conflict"] = (True, errors["leave_conflict"][1])
 
-    # 4. 空缺檢查
     for day in DAYS:
         for role in ROWS_ROSTER:
             if str(roster_df.at[role, day]).strip() == "":
@@ -134,7 +120,6 @@ def validate_and_compute(roster_df, students_df, leave_students, manual_weights)
                     errors["vacuum"][1].append(f"{day} - {role} 尚未排班")
                     errors["vacuum"] = (True, errors["vacuum"][1])
 
-    # 5. 計算累計負荷
     report = []
     for _, row in students_df.iterrows():
         name = str(row["name"]).strip()
@@ -180,13 +165,9 @@ def recommend_substitutes(roster_df, students_df, chosen_day, chosen_role):
         return None, "該時段目前無人值班"
 
     subs = []
-    leave_set = set()  # 可在此擴充
-
     for _, rec in students_df.iterrows():
         name = str(rec["name"]).strip()
         if not name or name == current_person:
-            continue
-        if name in leave_set:
             continue
         if chosen_day not in str(rec.get("available", "")).upper():
             continue
