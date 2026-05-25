@@ -7,7 +7,7 @@ import random
 
 from config import DAYS, ROWS_ROSTER, DAILY_VERSES, VERSION, APP_TITLE
 
-# 確保 ALL_VERSES 存在（防止 ImportError）
+# 確保 ALL_VERSES 存在
 if "ALL_VERSES" not in globals():
     ALL_VERSES = []
     for day_list in DAILY_VERSES.values():
