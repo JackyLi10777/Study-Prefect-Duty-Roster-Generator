@@ -13,22 +13,57 @@ from utils import generate_pdf, export_system_backup, import_system_backup, proc
 from ui_components import render_sidebar, show_daily_verse, render_control_buttons
 
 # ==========================================
-# Session State 初始化（完整版）
+# 使用說明書（完整版，已更新到 v2.0 最新功能）
 # ==========================================
-if 'students_df' not in st.session_state:
-    st.session_state.students_df = pd.DataFrame(columns=["name", "form", "class", "role", "fixed_general_duty", "available", "history_duties", "history_weight", "remarks"])
-if 'roster_df' not in st.session_state:
-    st.session_state.roster_df = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
-if 'logo_data' not in st.session_state:
-    st.session_state.logo_data = None
-if 'show_clear_confirm' not in st.session_state:
-    st.session_state.show_clear_confirm = False
-if 'leave_tracker_input' not in st.session_state:
-    st.session_state.leave_tracker_input = []
-if 'master_report_df' not in st.session_state:
-    st.session_state.master_report_df = pd.DataFrame()
-if 'manual_weights' not in st.session_state:
-    st.session_state.manual_weights = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)
+HELP_TEXT = """
+### 📖 Sing Yin Study Prefect Duty Roster System 使用說明書（v2.0）
+
+#### 1. 名冊導入（最重要）
+- **推薦使用「🤖 AI 智能自動匹配」**：支援**任意格式**的 Excel / CSV，AI 會自動辨識姓名、年級、職級、可用日子等欄位。
+- 傳統格式導入：需符合固定欄位名稱（姓名、年級、班別、職級、學年固定總值班、可用日子、歷史累計(次)、歷史動態(點)、備註）。
+- 建議先點「📥 下載名冊格式範例」參考。
+
+#### 2. 名冊即時修改
+- 在側邊欄可以直接編輯所有領袖生資料，修改後會即時儲存。
+
+#### 3. 生成值班表
+- 在側邊欄設定「請假人員」與「本週特殊不開放時段」。
+- 點擊主畫面大按鈕 **「🚀 智能計算：生成本週全新公平值班表」**。
+- 系統會自動考慮：可用日子、固定值班、老帶新機制（F.3 優先配 F.4/F.5）、歷史負荷平衡、避免連續值班。
+
+#### 4. 手動調整負荷指數（重要更新）
+- 在「🔧 手動調整本次值班負荷指數」表格可以直接修改每個崗位本次值班的點數。
+- **清空儲存格不會再出錯**（已修復）。
+- 修改後系統會自動重新計算累計負荷與公平性圖表。
+
+#### 5. 值班表操作
+- **視覺公告版**：漂亮的彩色表格，適合直接截圖或列印。
+- **手動修改版**：可以直接在表格上修改人名或打「X」鎖定。
+- 建議先生成後，再用手動修改版微調。
+
+#### 6. 智慧替補推薦
+- 選擇日期與崗位後，點擊「🔍 尋找最優替補」，系統會依據目前總點數由低到高推薦合適人選。
+
+#### 7. 匯出功能
+- **📄 匯出 PDF**：公告用彩色班表（含校徽）。
+- **📊 下載 Excel**：完整值班表 + 工作負荷統計表。
+- **📝 下載 Markdown**：方便複製到其他文件。
+
+#### 8. Cloud 備份（強烈建議）
+- 每次生成新班表後，建議在側邊欄點擊「⬇️ 導出完整備份 (JSON)」下載備份。
+- Streamlit Cloud 休眠後可以用「上傳備份 JSON 還原」快速恢復。
+
+#### 9. 其他小功能
+- 每日聖經金句可點擊「🔄 刷新金句」更換。
+- 側邊欄有即時統計（總領袖生、累計點數、平均負荷）。
+- AI 解析 Remarks：側邊欄可點「🚀 執行 AI 解析 Remarks」，自動更新固定值班與可用日子。
+
+---
+
+**有任何問題或建議，歡迎寄信到 s10777@syss.edu.hk**
+
+祝使用順利！🙏
+"""
 
 def main():
     render_sidebar()
@@ -37,6 +72,12 @@ def main():
     st.markdown(f'<p class="main-subtitle">F.3–F.5 Study Prefect Duty Platform | {VERSION}</p>', unsafe_allow_html=True)
     
     show_daily_verse()
+
+    # ==========================================
+    # 使用說明書（已恢復）
+    # ==========================================
+    with st.expander("📖 點此展開完整使用說明書（v2.0 最新版）", expanded=False):
+        st.markdown(HELP_TEXT)
 
     st.write("---")
     selected_closures = render_control_buttons()
@@ -101,9 +142,7 @@ def main():
             st.session_state.roster_df = edited_roster
             st.rerun()
 
-    # ==========================================
-    # 手動調整負荷（已加強數值保護 - 修復 TypeError）
-    # ==========================================
+    # 手動調整負荷
     st.write("---")
     st.subheader("🔧 手動調整本次值班負荷指數")
     st.caption("針對每個崗位本次值班，手動修改累計負荷點數")
@@ -114,7 +153,6 @@ def main():
         key="manual_weight_editor"
     )
 
-    # ★★★ 關鍵修復：強制轉成 float 並填補空值 ★★★
     if not manual_col.equals(st.session_state.manual_weights):
         st.session_state.manual_weights = (
             manual_col.astype(float)
