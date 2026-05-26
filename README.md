@@ -108,7 +108,7 @@ Study-Prefect-Duty-Roster-Generator/
 
 ### 📬 聯絡與反饋
 
-**顧問 / Head Study Prefect / Assistant Head Study Prefect**  
+**advisor / Head Study Prefect / Assistant Head Study Prefect**  
 如有任何問題或功能建議，請寄信至：**s10777@syss.edu.hk**
 
 ---
