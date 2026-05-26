@@ -66,6 +66,7 @@ def main():
     elif audit_results["vacuum"][0]:
         st.markdown('<div class="warning-alert"><b>💡 空缺提示：</b><br>' + '<br>'.join(audit_results["vacuum"][1]) + '</div>', unsafe_allow_html=True)
 
+    # 值班表
     st.write("---")
     st.subheader("📅 本週值班表")
     tab_view, tab_edit = st.tabs(["📅 視覺公告版", "✏️ 手動修改版"])
@@ -100,18 +101,28 @@ def main():
             st.session_state.roster_df = edited_roster
             st.rerun()
 
+    # ==========================================
+    # 手動調整負荷（已加強數值保護 - 修復 TypeError）
+    # ==========================================
     st.write("---")
     st.subheader("🔧 手動調整本次值班負荷指數")
     st.caption("針對每個崗位本次值班，手動修改累計負荷點數")
+
     manual_col = st.data_editor(
         st.session_state.manual_weights,
         use_container_width=True,
         key="manual_weight_editor"
     )
+
+    # ★★★ 關鍵修復：強制轉成 float 並填補空值 ★★★
     if not manual_col.equals(st.session_state.manual_weights):
-        st.session_state.manual_weights = manual_col
+        st.session_state.manual_weights = (
+            manual_col.astype(float)
+                     .fillna(0.0)
+        )
         st.rerun()
 
+    # 累計審計表
     st.write("---")
     st.subheader("📊 累計動態工作負荷審計表")
     if not st.session_state.master_report_df.empty:
@@ -132,6 +143,7 @@ def main():
         )
         st.plotly_chart(fig, use_container_width=True)
 
+    # 智慧替補
     st.write("---")
     st.subheader("🔍 智慧替補推薦")
     c1, c2 = st.columns(2)
@@ -147,6 +159,7 @@ def main():
         else:
             st.warning(msg)
 
+    # 快速導出
     st.write("---")
     st.subheader("📤 快速導出")
     col1, col2, col3 = st.columns(3)
