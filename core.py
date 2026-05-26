@@ -77,7 +77,7 @@ def generate_roster(students_df, leave_students, special_closures, seed):
 
 
 def validate_and_compute(roster_df, students_df, leave_students, manual_weights):
-    """完整驗證 + 計算累計負荷"""
+    """完整驗證 + 計算累計負荷（已加強防護）"""
     errors = {
         "typo": (False, []),
         "duplicate": (False, []),
@@ -132,7 +132,9 @@ def validate_and_compute(roster_df, students_df, leave_students, manual_weights)
         for day in DAYS:
             for role in ROWS_ROSTER:
                 if str(roster_df.at[role, day]).strip() == name:
-                    added = float(manual_weights.at[role, day])
+                    # ★★★ 加強防護：安全轉 float ★★★
+                    val = manual_weights.at[role, day]
+                    added = float(val) if pd.notna(val) else 0.0
                     total_weight += added
                     this_week += added
 
