@@ -7,9 +7,6 @@ import datetime
 import base64
 import google.generativeai as genai
 
-# ==========================================
-# 從 config 引入必要常數
-# ==========================================
 from config import DAYS, ROWS_ROSTER
 
 # ==========================================
@@ -32,7 +29,31 @@ else:
     model = None
 
 # ==========================================
-# 1. 名冊導入引擎（完整版）
+# 彩色樣式函數（與 app.py 保持一致）
+# ==========================================
+def get_cell_style(val, role, day):
+    val = str(val).strip()
+    if val == "X":
+        return "color:#EF4444; font-weight:bold; background-color:#FEF2F2; text-align:center;"
+    if 'Room202' in role and day in ['TUESDAY', 'FRIDAY']:
+        return "background-color:#E5E7EB; color:#9CA3AF; font-style:italic; text-align:center;"
+    if val == "":
+        return "background-color:#F9FAFB; text-align:center;"
+
+    base = "font-weight:bold; text-align:center; padding:6px;"
+
+    if "Assist" in role:
+        return base + " background-color:#FFF8E1; color:#B45309; border:1px solid #D4AF37;"
+    elif "Room302" in role:
+        return base + " background-color:#D1FAE5; color:#166534; border:1px solid #10B981;"
+    elif "Room303" in role:
+        return base + " background-color:#FEE2E2; color:#991B1B; border:1px solid #EF4444;"
+    elif "Room202" in role:
+        return base + " background-color:#DBEAFE; color:#1E40AF; border:1px solid #3B82F6;"
+    return base
+
+# ==========================================
+# 1. 名冊導入引擎
 # ==========================================
 def process_roster_import(uploaded_file):
     try:
@@ -77,7 +98,7 @@ def process_roster_import(uploaded_file):
         st.sidebar.error(f"❌ 導入失敗: {str(e)}")
 
 # ==========================================
-# AI 智能名冊導入（任意格式自動匹配）
+# AI 智能名冊導入
 # ==========================================
 def smart_process_roster_import(uploaded_file):
     try:
@@ -99,10 +120,10 @@ def smart_process_roster_import(uploaded_file):
 標準欄位定義：
 - "name": 姓名
 - "form": 年級 (F.3、F.4、F.5)
-- "class": 班別 (如 5A、4B)
-- "role": 職級 (Study Prefect 或 Assistant Head Study Prefect)
-- "fixed_general_duty": 學年固定總值班 (MONDAY/TUESDAY/.../NONE)
-- "available": 可用日子 (逗號分隔，如 MONDAY,WEDNESDAY,FRIDAY)
+- "class": 班別
+- "role": 職級 (Study Prefect / Assistant Head Study Prefect)
+- "fixed_general_duty": 學年固定總值班
+- "available": 可用日子
 - "history_duties": 歷史累計次數
 - "history_weight": 歷史累計點數
 - "remarks": 備註
@@ -110,12 +131,7 @@ def smart_process_roster_import(uploaded_file):
 表格前8行內容：
 {sample_text}
 
-請輸出以下格式的 JSON：
-{{
-  "name": "實際欄位名稱",
-  "form": "實際欄位名稱",
-  ...
-}}
+請輸出 JSON 格式。
 """
 
         if model is None:
@@ -151,15 +167,14 @@ def smart_process_roster_import(uploaded_file):
         df["history_weight"] = pd.to_numeric(df["history_weight"], errors="coerce").fillna(0.0)
 
         st.session_state.students_df = df[required_cols].reset_index(drop=True)
-        st.success(f"🎉 AI 智能導入成功！已處理 {len(df)} 位領袖生（自動匹配欄位）")
+        st.success(f"🎉 AI 智能導入成功！已處理 {len(df)} 位領袖生")
         st.rerun()
 
     except Exception as e:
         st.error(f"❌ AI 智能導入失敗: {str(e)}")
-        st.info("💡 提示：若 AI 無法解析，可使用傳統格式或檢查檔案是否損壞")
 
 # ==========================================
-# 2. 系統完整備份 / 還原
+# 系統備份 / 還原
 # ==========================================
 def export_system_backup(master_df):
     backup_data = {
@@ -204,7 +219,7 @@ def import_system_backup(uploaded_json_file):
                 st.session_state.manual_weights = manual_df.reindex(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)
             
             st.session_state.leave_tracker_input = data.get("leave_tracker", [])
-            st.sidebar.success("🔮 備份已完美還原（包含手動調整負荷）！")
+            st.sidebar.success("🔮 備份已完美還原！")
             st.rerun()
         else:
             st.sidebar.error("❌ 備份檔結構不符")
@@ -212,7 +227,7 @@ def import_system_backup(uploaded_json_file):
         st.sidebar.error(f"❌ 還原失敗: {str(e)}")
 
 # ==========================================
-# 3. A4 橫式 PDF 生成引擎
+# A4 橫式彩色 PDF 生成引擎（已優化）
 # ==========================================
 def generate_pdf(roster_df, master_report_df, logo_b64=None):
     if not PDF_AVAILABLE:
@@ -232,38 +247,53 @@ def generate_pdf(roster_df, master_report_df, logo_b64=None):
                 logo_b64 = None
 
     today = datetime.date.today().strftime("%Y-%m-%d")
-    html_table = roster_df.to_html(classes='table')
+
+    # 建立帶樣式的 HTML 表格
+    html_table = "<table style='width:100%; border-collapse:collapse; font-size:11px;'>"
+    html_table += "<tr>"
+    for col in roster_df.columns:
+        html_table += f"<th style='background-color:#0C2340; color:white; padding:8px; text-align:center;'>{col}</th>"
+    html_table += "</tr>"
+
+    for role in roster_df.index:
+        html_table += "<tr>"
+        for day in roster_df.columns:
+            val = str(roster_df.at[role, day]).strip()
+            style = get_cell_style(val, role, day)
+            html_table += f"<td style='{style}'>{val if val else '&nbsp;'}</td>"
+        html_table += "</tr>"
+    html_table += "</table>"
+
+    # 工作負荷統計表
     report_table = master_report_df[["學生姓名 (Prefect Name)", "年級 (Form)", "班別 (Class)", "職級 (Role)", "當週新增 (次)", "最終總計加權負荷 (點)"]].to_html(index=False, classes='table')
-    
+
     html = f"""
     <html><head><meta charset="UTF-8">
     <style>
-        @page {{ size: A4 landscape; margin: 20mm; }}
+        @page {{ size: A4 landscape; margin: 15mm; }}
         body {{ font-family: Arial, sans-serif; color: #333; line-height: 1.4; }}
-        .header-container {{ text-align: center; margin-bottom: 25px; }}
-        h1 {{ color:#0C2340; font-size: 26px; margin: 5px 0; letter-spacing: 1px; }}
-        h2 {{ color:#D4AF37; font-size: 16px; margin: 0 0 10px 0; font-weight: 600; text-transform: uppercase; }}
-        .date-sub {{ font-size: 11px; color: #666; margin-bottom: 20px; }}
-        h3 {{ color:#0C2340; border-left: 5px solid #D4AF37; padding-left: 10px; margin-top: 30px; font-size: 16px; }}
-        table {{ width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 11px; }}
-        th, td {{ border: 1px solid #D1D5DB; padding: 8px 10px; text-align: center; }}
-        th {{ background-color: #0C2340; color: white; font-weight: bold; font-size: 10px; }}
-        td {{ font-weight: bold; color: #1F2937; }}
-        tr:nth-child(even) td {{ background-color: #F9FAFB; }}
+        .header-container {{ text-align: center; margin-bottom: 20px; }}
+        h1 {{ color:#0C2340; font-size: 24px; margin: 5px 0; }}
+        h2 {{ color:#D4AF37; font-size: 15px; margin: 0 0 8px 0; font-weight: 600; }}
+        .date-sub {{ font-size: 11px; color: #666; margin-bottom: 15px; }}
+        h3 {{ color:#0C2340; border-left: 5px solid #D4AF37; padding-left: 10px; margin-top: 25px; font-size: 15px; }}
+        table {{ width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10px; }}
+        th, td {{ border: 1px solid #BDC3C7; padding: 6px 8px; text-align: center; }}
+        th {{ background-color: #0C2340; color: white; font-weight: bold; }}
     </style></head><body>
     <div class="header-container">
     """
     if logo_b64:
-        html += f'<img src="data:image/png;base64,{logo_b64}" style="height:65px; margin-bottom:10px;">'
+        html += f'<img src="data:image/png;base64,{logo_b64}" style="height:55px; margin-bottom:8px;">'
     html += f"""
         <h1>Sing Yin Secondary School</h1>
         <h2>Study Prefect Duty Roster & Workload Audit</h2>
-        <div class="date-sub">Report Generated Date: {today}</div>
+        <div class="date-sub">Report Generated: {today}</div>
     </div>
     <h3>📅 本週值班表 (Weekly Duty Roster)</h3>
     {html_table}
     <div style="page-break-before: always;"></div>
-    <h3>📊 累積動態工作負荷審計表 (Workload Audit Report)</h3>
+    <h3>📊 累積動態工作負荷審計表</h3>
     {report_table}
     </body></html>
     """
