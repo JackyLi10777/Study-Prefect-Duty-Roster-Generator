@@ -1,3 +1,4 @@
+# packages.txt - Streamlit Cloud WeasyPrint 專用（Debian trixie 相容版）
 fontconfig
 fonts-dejavu
 fonts-noto
@@ -6,11 +7,12 @@ fonts-noto-color-emoji
 libcairo2
 libdatrie1
 libdeflate0
+libffi8
 libfontconfig1
 libfreetype6
 libfribidi0
 libgdk-pixbuf-2.0-0
-libglib2.0-0
+libglib2.0-0t64
 libgraphite2-3
 libharfbuzz0b
 libjbig0
@@ -19,8 +21,9 @@ liblerc4
 libpango-1.0-0
 libpangocairo-1.0-0
 libpangoft2-1.0-0
+libpcre2-8-0
 libpixman-1-0
-libpng16-16
+libpng16-16t64
 libsharpyuv0
 libthai0
 libtiff6
