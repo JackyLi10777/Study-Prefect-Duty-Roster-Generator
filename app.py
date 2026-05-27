@@ -46,7 +46,7 @@ HELP_TEXT = """
 #### 8. Cloud 備份（強烈建議）
 - 每次生成新班表後，建議在側邊欄點擊「⬇️ 導出完整備份 (JSON)」下載備份。
 
-**有問題請寄信 s10777@syss.edu.hk**
+**有問題請 email s10777@syss.edu.hk**
 """
 
 def main():
