@@ -29,7 +29,7 @@ else:
     model = None
 
 # ==========================================
-# PDF 專用顏色樣式函數（沉穩專業版）
+# PDF 專用顏色樣式函數（border 統一 2px + 沉穩專業版）
 # ==========================================
 def get_cell_style(val, role, day):
     val = str(val).strip()
@@ -38,18 +38,18 @@ def get_cell_style(val, role, day):
         return f"color:{NASA_COLORS['x_text']}; font-weight:bold; background-color:{NASA_COLORS['x_bg']}; text-align:center; border:2px solid {NASA_COLORS['x_border']};"
 
     if 'Room202' in role and day in ['TUESDAY', 'FRIDAY']:
-        return f"background-color:{NASA_COLORS['closed_bg']}; color:#546E7A; font-style:italic; text-align:center; border:1px solid #90A4AE;"
+        return f"background-color:{NASA_COLORS['closed_bg']}; color:#546E7A; font-style:italic; text-align:center; border:2px solid #90A4AE;"
 
     if val == "":
-        return f"background-color:{NASA_COLORS['empty_bg']}; text-align:center;"
+        return f"background-color:{NASA_COLORS['empty_bg']}; text-align:center; border:1px solid #E5E7EB;"
 
     style = get_role_style(role, day)
 
     return (
-        f"font-weight:bold; text-align:center; padding:9px 7px; "
+        f"font-weight:bold; text-align:center; padding:8px 6px; "
         f"background-color:{style['bg']}; "
         f"color:{style['text']}; "
-        f"border:{style['border']};"
+        f"border:2px solid {style.get('border_color', '#BDC3C7')};"
     )
 
 # ==========================================
@@ -195,7 +195,7 @@ def import_system_backup(uploaded_json_file):
         st.sidebar.error(f"❌ 還原失敗: {str(e)}")
 
 # ==========================================
-# A4 橫式彩色 PDF 生成引擎（沉穩專業版）
+# A4 橫式彩色 PDF 生成引擎（border 2px + 沉穩專業版）
 # ==========================================
 def generate_pdf(roster_df, master_report_df, logo_b64=None):
     if not PDF_AVAILABLE:
@@ -216,19 +216,18 @@ def generate_pdf(roster_df, master_report_df, logo_b64=None):
 
     today = datetime.date.today().strftime("%Y-%m-%d")
 
-    # ==================== 建立彩色值班表 HTML ====================
     html_table = "<table style='width:100%; border-collapse:collapse; font-size:11px; margin:15px 0;'>"
 
     # Header Row
     html_table += f"<tr><th style='background-color:{NASA_COLORS['header_bg']}; color:white; padding:10px; text-align:center; border:2px solid {NASA_COLORS['accent_gold']};'>崗位</th>"
     for day in DAYS:
-        html_table += f"<th style='background-color:{NASA_COLORS['header_bg']}; color:white; padding:10px; text-align:center; border:1px solid {NASA_COLORS['accent_gold']};'>{day}</th>"
+        html_table += f"<th style='background-color:{NASA_COLORS['header_bg']}; color:white; padding:10px; text-align:center; border:2px solid {NASA_COLORS['accent_gold']};'>{day}</th>"
     html_table += "</tr>"
 
     # Data Rows
     for role in roster_df.index:
-        # 角色欄（第一列）- 深藍 + 金色文字 + 粗金邊框
-        html_table += f"<tr><td style='background-color:{NASA_COLORS['header_bg']}; color:{NASA_COLORS['accent_gold']}; font-weight:bold; padding:10px; text-align:center; border:3px solid {NASA_COLORS['accent_gold']};'>{role}</td>"
+        # 角色欄（第一列）
+        html_table += f"<tr><td style='background-color:{NASA_COLORS['header_bg']}; color:{NASA_COLORS['accent_gold']}; font-weight:bold; padding:10px; text-align:center; border:2px solid {NASA_COLORS['accent_gold']};'>{role}</td>"
 
         for day in DAYS:
             val = str(roster_df.at[role, day]).strip()
@@ -238,7 +237,6 @@ def generate_pdf(roster_df, master_report_df, logo_b64=None):
 
     html_table += "</table>"
 
-    # 工作負荷統計表
     report_table = master_report_df.to_html(index=False, classes='table')
 
     html = f"""
