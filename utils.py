@@ -29,7 +29,7 @@ else:
     model = None
 
 # ==========================================
-# PDF 專用顏色樣式函數（NASA 深邃風格 - 最終版）
+# PDF 專用顏色樣式函數（完整版 - 與 config.py 完全配合）
 # ==========================================
 def get_cell_style(val, role, day):
     val = str(val).strip()
@@ -43,6 +43,7 @@ def get_cell_style(val, role, day):
     if val == "":
         return f"background-color:{NASA_COLORS['empty_bg']}; text-align:center;"
 
+    # 核心：呼叫 config.py 的 get_role_style，確保所有房間都有正確顏色
     style = get_role_style(role, day)
 
     return (
@@ -227,7 +228,7 @@ def generate_pdf(roster_df, master_report_df, logo_b64=None):
 
     # Data Rows
     for role in roster_df.index:
-        # 角色欄（第一列）- 深太空藍 + 金色文字 + 粗金邊框
+        # 角色欄（第一列）使用深藍 + 金色文字 + 粗金邊框
         html_table += f"<tr><td style='background-color:{NASA_COLORS['header_bg']}; color:{NASA_COLORS['accent_gold']}; font-weight:bold; padding:10px; text-align:center; border:3px solid {NASA_COLORS['accent_gold']};'>{role}</td>"
 
         for day in DAYS:
