@@ -7,7 +7,6 @@ import random
 
 from config import DAYS, ROWS_ROSTER, DAILY_VERSES, VERSION, APP_TITLE
 
-# 確保 ALL_VERSES 存在
 if "ALL_VERSES" not in globals():
     ALL_VERSES = []
     for day_list in DAILY_VERSES.values():
@@ -76,7 +75,6 @@ def render_sidebar():
                 sample_df.to_excel(writer, index=False)
             st.download_button("✅ 下載範例檔", output.getvalue(), "Prefect_名冊格式範例.xlsx", use_container_width=True)
 
-        # ==================== 傳統 + AI 智能導入 ====================
         uploaded_roster = st.file_uploader("上傳名冊 (Excel/CSV)", type=["csv", "xlsx", "xls"], key="roster_importer")
 
         col_trad, col_ai = st.columns(2)
