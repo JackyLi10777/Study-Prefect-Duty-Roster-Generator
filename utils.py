@@ -29,7 +29,7 @@ else:
     model = None
 
 # ==========================================
-# PDF 專用顏色樣式函數（背景色加強版 + !important）
+# PDF 專用顏色樣式函數（背景填充加強版）
 # ==========================================
 def get_cell_style(val, role, day):
     val = str(val).strip()
@@ -61,6 +61,7 @@ def get_cell_style(val, role, day):
 
     style = get_role_style(role, day)
 
+    # 核心：background-color 負責填充整個格子背景
     return (
         f"font-weight:bold !important; "
         f"text-align:center !important; "
@@ -213,7 +214,7 @@ def import_system_backup(uploaded_json_file):
         st.sidebar.error(f"❌ 還原失敗: {str(e)}")
 
 # ==========================================
-# A4 橫式彩色 PDF 生成引擎（背景色加強版）
+# A4 橫式彩色 PDF 生成引擎（背景填充加強版）
 # ==========================================
 def generate_pdf(roster_df, master_report_df, logo_b64=None):
     if not PDF_AVAILABLE:
