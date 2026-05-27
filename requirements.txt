@@ -1,21 +1,12 @@
-# requirements.txt
-# Sing Yin Study Prefect Duty Roster - 最終版（2026-05-25）
-
 streamlit>=1.38.0
 pandas>=2.2.0
 openpyxl>=3.1.0
 plotly>=5.24.0
 weasyprint>=62.3
 pillow>=10.4.0
-google-generativeai>=0.8.0          # Gemini 3.5 Flash 必要套件
+google-generativeai>=0.8.0
+numpy>=1.26.0
+tabulate>=0.9.0
 html5lib>=1.1
 tinycss2>=1.2.1
 cssselect2>=0.7.0
-
-# 可選但建議保留的套件
-tabulate>=0.9.0                     # 用於某些表格顯示
-numpy>=1.26.0
-
-# 開發與除錯工具（可選，部署時可移除）
-black>=24.0.0
-flake8>=7.0.0
