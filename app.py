@@ -33,14 +33,14 @@ HELP_TEXT = """
 - 在「🔧 手動調整本次值班負荷指數」表格可直接修改點數。
 
 #### 5. 值班表操作
-- **視覺公告版**：NASA 深邃風格彩色顯示，不同崗位不同顏色。
+- **視覺公告版**：沉穩專業風格彩色顯示。
 - **手動修改版**：可直接修改人名或打「X」鎖定。
 
 #### 6. 智慧替補推薦
 - 選擇日期與崗位後，點擊「🔍 尋找最優替補」。
 
 #### 7. 匯出功能
-- **📄 匯出 PDF**：NASA 深邃風格彩色（含校徽）。
+- **📄 匯出 PDF**：沉穩專業風格彩色（含校徽）。
 - **📊 下載 Excel** / **📝 下載 Markdown**。
 
 #### 8. Cloud 備份（強烈建議）
@@ -51,7 +51,7 @@ HELP_TEXT = """
 
 def main():
     # ==========================================
-    # Session State 初始化（必須放在最前面）
+    # Session State 初始化
     # ==========================================
     if 'students_df' not in st.session_state:
         st.session_state.students_df = pd.DataFrame(columns=[
@@ -73,11 +73,13 @@ def main():
 
     render_sidebar()
 
+    # 主標題
     st.markdown(f'<p class="main-title">{APP_TITLE}</p>', unsafe_allow_html=True)
     st.markdown(f'<p class="main-subtitle">F.3–F.5 Study Prefect Duty Platform | {VERSION}</p>', unsafe_allow_html=True)
 
     show_daily_verse()
 
+    # 使用說明書
     with st.expander("📖 點此展開完整使用說明書（v2.1 Final）", expanded=False):
         st.markdown(HELP_TEXT)
 
@@ -86,6 +88,7 @@ def main():
 
     leave_students = st.session_state.leave_tracker_input
 
+    # 驗證與計算
     audit_results = validate_and_compute(
         st.session_state.roster_df,
         st.session_state.students_df,
@@ -114,22 +117,21 @@ def main():
     # ==================== 值班表 ====================
     st.write("---")
     st.subheader("📅 本週值班表")
-    tab_view, tab_edit = st.tabs(["📅 視覺公告版 (NASA Deep Space)", "✏️ 手動修改版"])
+    tab_view, tab_edit = st.tabs(["📅 視覺公告版 (沉穩專業)", "✏️ 手動修改版"])
 
     def apply_cell_style(val, role, day):
         val = str(val).strip()
         if val == "X":
             return f"color:{NASA_COLORS['x_text']}; font-weight:bold; background-color:{NASA_COLORS['x_bg']}; text-align:center; border:2px solid {NASA_COLORS['x_border']};"
         if 'Room202' in role and day in ['TUESDAY', 'FRIDAY']:
-            return f"background-color:{NASA_COLORS['closed_bg']}; color:#546E7A; font-style:italic; text-align:center; border:1px solid #90A4AE;"
+            return f"background-color:{NASA_COLORS['closed_bg']}; color:#546E7A; font-style:italic; text-align:center; border:2px solid #90A4AE;"
         if val == "":
-            return f"background-color:{NASA_COLORS['empty_bg']}; text-align:center;"
+            return f"background-color:{NASA_COLORS['empty_bg']}; text-align:center; border:1px solid #E5E7EB;"
 
         style = get_role_style(role, day)
         return f"font-weight:bold; text-align:center; padding:8px 6px; background-color:{style['bg']}; color:{style['text']}; border:{style['border']};"
 
     with tab_view:
-        # 只使用 apply（最穩定），顏色已足夠豐富
         styled = st.session_state.roster_df.style.apply(
             lambda row: [apply_cell_style(val, row.name, col) for col, val in row.items()], axis=1
         )
