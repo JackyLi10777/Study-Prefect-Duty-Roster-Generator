@@ -9,7 +9,7 @@ libdeflate0
 libfontconfig1
 libfreetype6
 libfribidi0
-libgdk-pixbuf-2.0-0          # ← 已修正（取代原本的 libgdk-pixbuf2.0-0）
+libgdk-pixbuf-2.0-0
 libglib2.0-0
 libgraphite2-3
 libharfbuzz0b
