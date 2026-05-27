@@ -13,7 +13,7 @@ from utils import generate_pdf, export_system_backup, import_system_backup, proc
 from ui_components import render_sidebar, show_daily_verse, render_control_buttons
 
 # ==========================================
-# 使用說明書（完整版 v2.0）
+# 使用說明書（完整版 v2.0，已更新）
 # ==========================================
 HELP_TEXT = """
 ### 📖 Sing Yin Study Prefect Duty Roster System 使用說明書（v2.0）
@@ -66,7 +66,7 @@ HELP_TEXT = """
 
 def main():
     # ==========================================
-    # ★★★ Session State 初始化（必須放在最前面）★★★
+    # Session State 初始化（必須放在最前面）
     # ==========================================
     if 'students_df' not in st.session_state:
         st.session_state.students_df = pd.DataFrame(columns=["name", "form", "class", "role", "fixed_general_duty", "available", "history_duties", "history_weight", "remarks"])
