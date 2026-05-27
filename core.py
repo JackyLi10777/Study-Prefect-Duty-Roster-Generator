@@ -4,13 +4,13 @@ import random
 from config import DAYS, ROWS_ROSTER, WEIGHTS
 
 def generate_roster(students_df, leave_students, special_closures, seed):
-    """核心公平排班演算法（已嚴格實作角色限制 + 同一天不可重複）"""
+    """核心公平排班演算法（最終版：嚴格角色限制 + 同一天不可重複）"""
     random.seed(seed)
     roster = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
 
     leave_set = set(str(name).strip() for name in leave_students if str(name).strip())
 
-    # 建立學生資訊字典
+    # 建立學生資訊
     student_info = {}
     for _, row in students_df.iterrows():
         name = str(row["name"]).strip()
@@ -27,8 +27,7 @@ def generate_roster(students_df, leave_students, special_closures, seed):
     last_duty_day = {name: -1 for name in student_info.keys()}
 
     for day_idx, day in enumerate(DAYS):
-        # 記錄當天已被指派的人（用來嚴格避免同一天重複）
-        assigned_today = set()
+        assigned_today = set()   # 嚴格記錄當天已被指派的人
 
         for role in ROWS_ROSTER:
             # 特殊不開放
@@ -40,19 +39,18 @@ def generate_roster(students_df, leave_students, special_closures, seed):
                 roster.at[role, day] = "X"
                 continue
 
-            # ==================== 角色限制 ====================
             is_assist_role = "Assist" in role
 
-            # 先處理固定值班
+            # ==================== 固定值班 ====================
             assigned = False
             for name, info in student_info.items():
                 if info["fixed"] == day and name not in leave_set:
-                    # 角色檢查
+                    # 角色限制
                     if is_assist_role and info["role"] != "Assistant Head Study Prefect":
                         continue
                     if not is_assist_role and info["role"] != "Study Prefect":
                         continue
-                    if name in assigned_today:  # 同一天已排過
+                    if name in assigned_today:
                         continue
 
                     roster.at[role, day] = name
@@ -73,10 +71,10 @@ def generate_roster(students_df, leave_students, special_closures, seed):
                     continue
                 if last_duty_day.get(name, -1) == day_idx - 1:
                     continue
-                if name in assigned_today:          # ★ 同一天不可重複
+                if name in assigned_today:          # 同一天不可重複
                     continue
 
-                # ★ 嚴格角色限制
+                # 嚴格角色限制
                 if is_assist_role and info["role"] != "Assistant Head Study Prefect":
                     continue
                 if not is_assist_role and info["role"] != "Study Prefect":
@@ -106,7 +104,7 @@ def generate_roster(students_df, leave_students, special_closures, seed):
 
 
 def validate_and_compute(roster_df, students_df, leave_students, manual_weights):
-    """完整驗證 + 計算累計負荷（已加強防護）"""
+    """完整驗證 + 計算累計負荷（最終版）"""
     errors = {
         "typo": (False, []),
         "duplicate": (False, []),
@@ -189,7 +187,7 @@ def validate_and_compute(roster_df, students_df, leave_students, manual_weights)
 
 
 def recommend_substitutes(roster_df, students_df, chosen_day, chosen_role):
-    """智慧替補推薦"""
+    """智慧替補推薦（最終版，含角色限制）"""
     current_person = str(roster_df.at[chosen_role, chosen_day]).strip()
     if not current_person or current_person == "X":
         return None, "該時段目前無人值班"
