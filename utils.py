@@ -29,46 +29,51 @@ else:
     model = None
 
 # ==========================================
-# PDF 專用顏色樣式函數（背景填充加強版）
+# 單元格樣式計算核心（背景填充加強版）
 # ==========================================
-def get_cell_style(val, role, day):
+def compute_style_attributes(val, role, day):
     val = str(val).strip()
 
     if val == "X":
-        return (
-            f"color:{NASA_COLORS['x_text']} !important; "
-            f"font-weight:bold; "
-            f"background-color:{NASA_COLORS['x_bg']} !important; "
-            f"text-align:center; "
-            f"border:2px solid {NASA_COLORS['x_border']} !important;"
-        )
+        return {
+            "bg": NASA_COLORS['x_bg'],
+            "text": NASA_COLORS['x_text'],
+            "border": f"2px solid {NASA_COLORS['x_border']}",
+        }
 
     if 'Room202' in role and day in ['TUESDAY', 'FRIDAY']:
-        return (
-            f"background-color:{NASA_COLORS['closed_bg']} !important; "
-            f"color:#546E7A !important; "
-            f"font-style:italic; "
-            f"text-align:center; "
-            f"border:2px solid #90A4AE !important;"
-        )
+        return {
+            "bg": NASA_COLORS['closed_bg'],
+            "text": "#546E7A",
+            "border": "2px solid #90A4AE",
+        }
 
     if val == "":
-        return (
-            f"background-color:{NASA_COLORS['empty_bg']} !important; "
-            f"text-align:center; "
-            f"border:1px solid #E5E7EB !important;"
-        )
+        return {
+            "bg": NASA_COLORS['empty_bg'],
+            "text": "#333333",
+            "border": "1px solid #E5E7EB",
+        }
 
     style = get_role_style(role, day)
+    return {
+        "bg": style.get('bg', '#FFFFFF'),
+        "text": style.get('text', '#000000'),
+        "border": style.get('border', '1px solid #BDC3C7'),
+    }
 
-    # 核心：background-color 負責填充整個格子背景
+# ==========================================
+# PDF 專用顏色樣式函數（背景色明顯加強版）
+# ==========================================
+def get_cell_style(val, role, day):
+    attrs = compute_style_attributes(val, role, day)
     return (
-        f"font-weight:bold !important; "
-        f"text-align:center !important; "
-        f"padding:8px 6px !important; "
-        f"background-color:{style['bg']} !important; "
-        f"color:{style['text']} !important; "
-        f"border:{style['border']} !important;"
+        f"background-color: {attrs['bg']} !important; "
+        f"color: {attrs['text']} !important; "
+        f"border: {attrs['border']} !important; "
+        f"font-weight: bold !important; "
+        f"text-align: center !important; "
+        f"padding: 10px 8px !important;"
     )
 
 # ==========================================
@@ -257,10 +262,15 @@ def generate_pdf(roster_df, master_report_df, logo_b64=None):
 
     report_table = master_report_df.to_html(index=False, classes='table')
 
+    # 關鍵修正：強制 PDF 保留背景色
     html = f"""
     <html><head><meta charset="UTF-8">
     <style>
         @page {{ size: A4 landscape; margin: 12mm; }}
+        html, body {{
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }}
         body {{ font-family: Arial, sans-serif; color: #333; line-height: 1.4; }}
         .header-container {{ text-align: center; margin-bottom: 15px; }}
         h1 {{ color:{NASA_COLORS['header_bg']}; font-size: 24px; margin: 5px 0; }}
