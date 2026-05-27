@@ -33,7 +33,7 @@ HELP_TEXT = """
 - 在「🔧 手動調整本次值班負荷指數」表格可直接修改點數。
 
 #### 5. 值班表操作
-- **視覺公告版**：NASA 深邃風格彩色顯示，角色欄有深藍 + 金色突出。
+- **視覺公告版**：NASA 深邃風格彩色顯示，不同崗位不同顏色。
 - **手動修改版**：可直接修改人名或打「X」鎖定。
 
 #### 6. 智慧替補推薦
@@ -44,7 +44,7 @@ HELP_TEXT = """
 - **📊 下載 Excel** / **📝 下載 Markdown**。
 
 #### 8. Cloud 備份（強烈建議）
-- 每次生成後建議備份 JSON，休眠後可還原。
+- 每次生成後建議備份 JSON。
 
 **有問題請 email s10777@syss.edu.hk**
 """
@@ -129,14 +129,9 @@ def main():
         return f"font-weight:bold; text-align:center; padding:8px 6px; background-color:{style['bg']}; color:{style['text']}; border:{style['border']};"
 
     with tab_view:
-        # 一般格子樣式（依角色）
+        # 只使用 apply（最穩定），顏色已足夠豐富
         styled = st.session_state.roster_df.style.apply(
             lambda row: [apply_cell_style(val, row.name, col) for col, val in row.items()], axis=1
-        )
-        # 角色欄（第一列）特別樣式 - 深藍 + 金色文字 + 粗金邊框（NASA 儀表板風格）
-        styled = styled.apply_index(
-            lambda x: f"background-color:{NASA_COLORS['header_bg']}; color:{NASA_COLORS['accent_gold']}; font-weight:bold; border:3px solid {NASA_COLORS['accent_gold']}; text-align:center;",
-            axis=0
         )
         st.dataframe(styled, use_container_width=True, height=320)
 
