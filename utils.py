@@ -159,7 +159,7 @@ def smart_process_roster_import(uploaded_file):
         st.info("💡 提示：若 AI 無法解析，可使用傳統格式或檢查檔案是否損壞")
 
 # ==========================================
-# 2. 系統完整備份 / 還原（已修正）
+# 2. 系統完整備份 / 還原
 # ==========================================
 def export_system_backup(master_df):
     backup_data = {
