@@ -5,26 +5,30 @@ import datetime
 import io
 import random
 
-from config import DAYS, ROWS_ROSTER, DAILY_VERSES, VERSION, APP_TITLE
-
-if "ALL_VERSES" not in globals():
-    ALL_VERSES = []
-    for day_list in DAILY_VERSES.values():
-        ALL_VERSES.extend(day_list)
-
+from config import DAYS, ROWS_ROSTER, DAILY_VERSES, VERSION, APP_TITLE, NASA_COLORS
 from core import generate_roster
-from utils import process_roster_import, smart_process_roster_import, export_system_backup, import_system_backup
+from utils import (
+    process_roster_import, smart_process_roster_import,
+    export_system_backup, import_system_backup
+)
 from data import get_demo_dataframe, get_sample_format_dataframe
 from ai_parser import ai_parse_remarks
 
+# 合併所有金句供隨機刷新使用
+ALL_VERSES = []
+for day_list in DAILY_VERSES.values():
+    ALL_VERSES.extend(day_list)
+
 def show_daily_verse():
+    """顯示每日聖經金句 + 刷新按鈕"""
     if "current_verse" not in st.session_state or st.session_state.current_verse is None:
         st.session_state.current_verse = random.choice(ALL_VERSES)
 
     st.markdown(f"""
-    <div style="background:#F8F1E3;padding:20px;border-radius:12px;margin:20px 0;text-align:center;border-left:6px solid #D4AF37;">
-        <h4 style="margin:0 0 8px 0;color:#0C2340;">📖 今日聖經金句</h4>
-        <p style="font-size:16px;margin:0;color:#333;line-height:1.5;">{st.session_state.current_verse}</p>
+    <div style="background:#F8F1E3; padding:18px 20px; border-radius:12px; margin:15px 0; 
+                text-align:center; border-left:6px solid {NASA_COLORS['accent_gold']};">
+        <h4 style="margin:0 0 6px 0; color:{NASA_COLORS['header_bg']};">📖 今日聖經金句</h4>
+        <p style="font-size:15.5px; margin:0; color:#333; line-height:1.5;">{st.session_state.current_verse}</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -33,12 +37,14 @@ def show_daily_verse():
         st.rerun()
 
 def render_sidebar():
+    """側邊欄完整功能"""
     with st.sidebar:
         st.header("🏫 Sing Yin Secondary School")
-        
+
+        # Logo 顯示開關
         show_logo = st.checkbox("🖼️ 顯示校徽（畫面與 PDF）", value=True, key="show_logo_toggle")
-        
-        uploaded_logo = st.file_uploader("上傳自訂校徽 (PNG)（可選）", type=["png"], key="logo_uploader")
+
+        uploaded_logo = st.file_uploader("上傳自訂校徽 (PNG)", type=["png"], key="logo_uploader")
         if uploaded_logo:
             st.session_state.logo_data = uploaded_logo.getvalue()
             st.success("✅ 已使用自訂校徽")
@@ -47,10 +53,11 @@ def render_sidebar():
                 with open("logo.png", "rb") as f:
                     st.session_state.logo_data = f.read()
             except FileNotFoundError:
-                st.info("💡 請將 logo.png 放到 GitHub 專案根目錄")
+                st.info("💡 請將 logo.png 放到專案根目錄")
 
         st.write("---")
         st.subheader("📊 即時統計")
+
         if not st.session_state.students_df.empty:
             total = len(st.session_state.students_df)
             total_points = st.session_state.students_df["history_weight"].sum()
@@ -63,6 +70,7 @@ def render_sidebar():
 
         st.write("---")
         st.subheader("🗄️ 名冊管理")
+
         if st.button("💡 一鍵載入官方示範名冊", use_container_width=True):
             st.session_state.students_df = get_demo_dataframe()
             st.success("✅ 示範名冊已載入")
@@ -85,10 +93,11 @@ def render_sidebar():
             if uploaded_roster and st.button("🤖 AI 智能自動匹配", type="primary", use_container_width=True):
                 smart_process_roster_import(uploaded_roster)
 
-        st.caption("💡 AI 智能導入：支援任意欄位名稱與順序，無需固定格式")
+        st.caption("💡 AI 智能導入：支援任意欄位名稱與順序")
 
         st.write("---")
         st.subheader("👥 名冊即時修改")
+
         st.caption("直接在此編輯所有資料")
         st.session_state.students_df = st.data_editor(
             st.session_state.students_df,
@@ -102,11 +111,15 @@ def render_sidebar():
                 "history_weight": st.column_config.NumberColumn("歷史動態(點)", min_value=0.0, step=0.5),
                 "remarks": st.column_config.TextColumn("備註")
             },
-            num_rows="dynamic", use_container_width=True, hide_index=True, key="student_editor_widget"
+            num_rows="dynamic",
+            use_container_width=True,
+            hide_index=True,
+            key="student_editor_widget"
         )
 
         st.write("---")
         st.subheader("🤖 AI 智能解析")
+
         if st.button("🚀 執行 AI 解析 Remarks", use_container_width=True):
             with st.spinner("AI 解析中..."):
                 updated_df = ai_parse_remarks(st.session_state.students_df)
@@ -116,12 +129,15 @@ def render_sidebar():
 
         st.write("---")
         st.subheader("🛑 請假登記")
+
         valid_names = [str(name).strip() for name in st.session_state.students_df["name"].dropna() if str(name).strip()]
         st.session_state.leave_tracker_input = st.multiselect("選取今日請假人員", options=valid_names)
 
         st.write("---")
         st.subheader("💾 Cloud 備份系統")
+
         st.caption("解決 Streamlit Cloud 休眠重置問題")
+
         if st.button("⬇️ 導出完整備份 (JSON)", use_container_width=True):
             backup_json = export_system_backup(st.session_state.get("master_report_df", pd.DataFrame()))
             st.download_button("✅ 下載備份檔", backup_json, f"SYSS_Backup_{datetime.date.today().strftime('%Y%m%d')}.json", "application/json", use_container_width=True)
@@ -133,18 +149,21 @@ def render_sidebar():
         st.caption("💡 每次生成班表後建議立即備份")
 
 def render_control_buttons():
-    closure_options = [f"{d} - {room}" for d in DAYS for room in ["Room302", "Room303", "Room202"] if not (room == "Room202" and d in ["TUESDAY", "FRIDAY"])]
+    """主畫面控制按鈕"""
+    closure_options = [f"{d} - {room}" for d in DAYS for room in ["Room302", "Room303", "Room202"]
+                       if not (room == "Room202" and d in ["TUESDAY", "FRIDAY"])]
     selected_closures = st.multiselect("🛠️ 本週特殊不開放時段", options=closure_options, key="special_closures")
 
     col1, col2, col3 = st.columns([2, 1.5, 1.5])
+
     with col1:
         if st.button("🚀 智能計算：生成本週全新公平值班表", type="primary", use_container_width=True):
             with st.spinner("計算中..."):
                 seed = random.randint(10000, 99999)
                 st.session_state.roster_df = generate_roster(
-                    st.session_state.students_df, 
-                    st.session_state.leave_tracker_input, 
-                    selected_closures, 
+                    st.session_state.students_df,
+                    st.session_state.leave_tracker_input,
+                    selected_closures,
                     seed
                 )
                 st.success(f"✅ 排班完成！驗證碼: SY-{seed}")
