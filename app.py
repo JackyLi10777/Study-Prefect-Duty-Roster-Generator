@@ -13,10 +13,10 @@ from utils import generate_pdf, export_system_backup, import_system_backup, proc
 from ui_components import render_sidebar, show_daily_verse, render_control_buttons
 
 # ==========================================
-# 使用說明書（完整版 v2.0）
+# 使用說明書（完整版 v2.0 Final）
 # ==========================================
 HELP_TEXT = """
-### 📖 Sing Yin Study Prefect Duty Roster System 使用說明書（v2.0）
+### 📖 Sing Yin Study Prefect Duty Roster System 使用說明書（v2.0 Final）
 
 #### 1. 名冊導入（最重要）
 - **推薦使用「🤖 AI 智能自動匹配」**：支援任意格式的 Excel / CSV。
@@ -75,7 +75,7 @@ def main():
     
     show_daily_verse()
 
-    with st.expander("📖 點此展開完整使用說明書（v2.0）", expanded=False):
+    with st.expander("📖 點此展開完整使用說明書（v2.0 Final）", expanded=False):
         st.markdown(HELP_TEXT)
 
     st.write("---")
