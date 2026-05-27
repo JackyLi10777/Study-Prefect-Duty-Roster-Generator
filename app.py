@@ -19,38 +19,34 @@ HELP_TEXT = """
 ### 📖 Sing Yin Study Prefect Duty Roster System 使用說明書（v2.1 Final - NASA Deep Space Edition）
 
 #### 1. 名冊導入（最重要）
-- **推薦使用「🤖 AI 智能自動匹配」**：支援任意格式的 Excel / CSV，AI 會自動辨識欄位。
+- **推薦使用「🤖 AI 智能自動匹配」**：支援任意格式的 Excel / CSV。
 - 建議先點「📥 下載名冊格式範例」參考。
 
 #### 2. 名冊即時修改
-- 在側邊欄可以直接編輯所有領袖生資料，修改後即時儲存。
+- 在側邊欄可以直接編輯所有領袖生資料。
 
 #### 3. 生成值班表
 - 在側邊欄設定請假人員與特殊不開放時段。
 - 點擊主畫面大按鈕「🚀 智能計算：生成本週全新公平值班表」。
 
 #### 4. 手動調整負荷指數
-- 在「🔧 手動調整本次值班負荷指數」表格可直接修改每個崗位的點數。
+- 在「🔧 手動調整本次值班負荷指數」表格可直接修改點數。
 
 #### 5. 值班表操作
-- **視覺公告版**：NASA 深邃風格彩色顯示，不同崗位不同顏色，一目了然。
-- **手動修改版**：可直接在表格上修改人名或打「X」鎖定。
+- **視覺公告版**：NASA 深邃風格彩色顯示，角色欄有深藍 + 金色突出。
+- **手動修改版**：可直接修改人名或打「X」鎖定。
 
 #### 6. 智慧替補推薦
-- 選擇日期與崗位後，點擊「🔍 尋找最優替補」，系統會依據目前總點數由低到高推薦。
+- 選擇日期與崗位後，點擊「🔍 尋找最優替補」。
 
 #### 7. 匯出功能
-- **📄 匯出 PDF**：NASA 深邃風格彩色班表（含校徽），適合公告列印。
-- **📊 下載 Excel**：完整值班表 + 工作負荷統計表。
-- **📝 下載 Markdown**：方便複製到其他文件。
+- **📄 匯出 PDF**：NASA 深邃風格彩色（含校徽）。
+- **📊 下載 Excel** / **📝 下載 Markdown**。
 
 #### 8. Cloud 備份（強烈建議）
-- 每次生成新班表後，建議在側邊欄點擊「⬇️ 導出完整備份 (JSON)」下載備份。
-- Streamlit Cloud 休眠後可用「上傳備份 JSON 還原」快速恢復。
+- 每次生成後建議備份 JSON，休眠後可還原。
 
 **有問題請 email s10777@syss.edu.hk**
-
-祝使用順利！🙏
 """
 
 def main():
@@ -77,13 +73,11 @@ def main():
 
     render_sidebar()
 
-    # 主標題
     st.markdown(f'<p class="main-title">{APP_TITLE}</p>', unsafe_allow_html=True)
     st.markdown(f'<p class="main-subtitle">F.3–F.5 Study Prefect Duty Platform | {VERSION}</p>', unsafe_allow_html=True)
 
     show_daily_verse()
 
-    # 使用說明書
     with st.expander("📖 點此展開完整使用說明書（v2.1 Final）", expanded=False):
         st.markdown(HELP_TEXT)
 
@@ -92,7 +86,6 @@ def main():
 
     leave_students = st.session_state.leave_tracker_input
 
-    # 驗證與計算
     audit_results = validate_and_compute(
         st.session_state.roster_df,
         st.session_state.students_df,
@@ -136,8 +129,14 @@ def main():
         return f"font-weight:bold; text-align:center; padding:8px 6px; background-color:{style['bg']}; color:{style['text']}; border:{style['border']};"
 
     with tab_view:
+        # 一般格子樣式（依角色）
         styled = st.session_state.roster_df.style.apply(
             lambda row: [apply_cell_style(val, row.name, col) for col, val in row.items()], axis=1
+        )
+        # 角色欄（第一列）特別樣式 - 深藍 + 金色文字 + 粗金邊框（NASA 儀表板風格）
+        styled = styled.apply_index(
+            lambda x: f"background-color:{NASA_COLORS['header_bg']}; color:{NASA_COLORS['accent_gold']}; font-weight:bold; border:3px solid {NASA_COLORS['accent_gold']}; text-align:center;",
+            axis=0
         )
         st.dataframe(styled, use_container_width=True, height=320)
 
@@ -155,8 +154,6 @@ def main():
     # 手動調整負荷
     st.write("---")
     st.subheader("🔧 手動調整本次值班負荷指數")
-    st.caption("針對每個崗位本次值班，手動修改累計負荷點數")
-
     manual_col = st.data_editor(
         st.session_state.manual_weights,
         use_container_width=True,
@@ -166,7 +163,7 @@ def main():
         st.session_state.manual_weights = manual_col.astype(float).fillna(0.0)
         st.rerun()
 
-    # 累計審計表
+    # 累計審計表 + 圖表
     st.write("---")
     st.subheader("📊 累計動態工作負荷審計表")
     if not st.session_state.master_report_df.empty:
@@ -174,7 +171,6 @@ def main():
     else:
         st.info("請先生成排班表以顯示審計表")
 
-    # 公平性圖表
     if not st.session_state.master_report_df.empty:
         st.write("---")
         st.subheader("🦅 全體累積工作點數公平性監控")
