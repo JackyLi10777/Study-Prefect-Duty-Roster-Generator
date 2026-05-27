@@ -28,24 +28,31 @@ WEIGHTS = {
 }
 
 # ==========================================
-# NASA 深邃風格 統一顏色系統（沉穩專業版）
+# NASA 深邃風格 統一顏色系統（沉穩專業版 + 修復 text_dark）
 # ==========================================
 NASA_COLORS = {
     "header_bg": "#0B1E3D",
     "accent_gold": "#B8860B",
     
+    # 預設文字顏色（修復 KeyError）
+    "text_dark": "#1F2937",
+    
+    # Assist. in charge（領導崗位 - 沉穩暖金）
     "assist_bg": "#F5E8D3",
     "assist_border": "#B8860B",
     "assist_text": "#3E2723",
     
+    # Room 302（沉穩青灰）
     "room302_bg": "#D5E4E4",
     "room302_border": "#4A8B8B",
     "room302_text": "#1E4D4D",
     
+    # Room 303（沉穩暖灰橘）
     "room303_bg": "#EDE0D4",
     "room303_border": "#A67C5D",
     "room303_text": "#4A2F1F",
     
+    # Room 202（沉穩藍灰）
     "room202_bg": "#D9E3ED",
     "room202_border": "#5B7B9A",
     "room202_text": "#1F3A5F",
