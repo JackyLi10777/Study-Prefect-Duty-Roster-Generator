@@ -29,27 +29,45 @@ else:
     model = None
 
 # ==========================================
-# PDF 專用顏色樣式函數（已修正）
+# PDF 專用顏色樣式函數（背景色加強版 + !important）
 # ==========================================
 def get_cell_style(val, role, day):
     val = str(val).strip()
 
     if val == "X":
-        return f"color:{NASA_COLORS['x_text']}; font-weight:bold; background-color:{NASA_COLORS['x_bg']}; text-align:center; border:2px solid {NASA_COLORS['x_border']};"
+        return (
+            f"color:{NASA_COLORS['x_text']} !important; "
+            f"font-weight:bold; "
+            f"background-color:{NASA_COLORS['x_bg']} !important; "
+            f"text-align:center; "
+            f"border:2px solid {NASA_COLORS['x_border']} !important;"
+        )
 
     if 'Room202' in role and day in ['TUESDAY', 'FRIDAY']:
-        return f"background-color:{NASA_COLORS['closed_bg']}; color:#546E7A; font-style:italic; text-align:center; border:2px solid #90A4AE;"
+        return (
+            f"background-color:{NASA_COLORS['closed_bg']} !important; "
+            f"color:#546E7A !important; "
+            f"font-style:italic; "
+            f"text-align:center; "
+            f"border:2px solid #90A4AE !important;"
+        )
 
     if val == "":
-        return f"background-color:{NASA_COLORS['empty_bg']}; text-align:center; border:1px solid #E5E7EB;"
+        return (
+            f"background-color:{NASA_COLORS['empty_bg']} !important; "
+            f"text-align:center; "
+            f"border:1px solid #E5E7EB !important;"
+        )
 
     style = get_role_style(role, day)
 
     return (
-        f"font-weight:bold; text-align:center; padding:8px 6px; "
-        f"background-color:{style['bg']}; "
-        f"color:{style['text']}; "
-        f"border:{style['border']};"
+        f"font-weight:bold !important; "
+        f"text-align:center !important; "
+        f"padding:8px 6px !important; "
+        f"background-color:{style['bg']} !important; "
+        f"color:{style['text']} !important; "
+        f"border:{style['border']} !important;"
     )
 
 # ==========================================
@@ -195,7 +213,7 @@ def import_system_backup(uploaded_json_file):
         st.sidebar.error(f"❌ 還原失敗: {str(e)}")
 
 # ==========================================
-# A4 橫式彩色 PDF 生成引擎（已修正）
+# A4 橫式彩色 PDF 生成引擎（背景色加強版）
 # ==========================================
 def generate_pdf(roster_df, master_report_df, logo_b64=None):
     if not PDF_AVAILABLE:
