@@ -76,7 +76,7 @@ Study-Prefect-Duty-Roster-Generator/
 ### 📬 聯絡與反饋
 
 **Sing Yin Secondary School Study Prefect Team**  
-如有任何問題、建議或功能需求，歡迎寄信至：**s10777@syss.edu.hk**
+如有任何問題、建議或功能需求，歡迎email至：**s10777@syss.edu.hk**
 
 ---
 
