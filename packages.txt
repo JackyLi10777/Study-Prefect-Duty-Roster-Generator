@@ -1,4 +1,3 @@
-# packages.txt - Streamlit Cloud WeasyPrint 專用（Debian trixie 相容版）
 fontconfig
 fonts-dejavu
 fonts-noto
