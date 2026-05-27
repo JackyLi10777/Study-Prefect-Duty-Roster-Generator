@@ -197,4 +197,43 @@ def validate_and_compute(roster_df, students_df, leave_students, manual_weights)
         "report_df": report_df,
         "typo": errors["typo"],
         "duplicate": errors["duplicate"],
-        "leave_conflict": errors["lea
+        "leave_conflict": errors["leave_conflict"],
+        "vacuum": errors["vacuum"]
+    }
+
+
+def recommend_substitutes(roster_df, students_df, chosen_day, chosen_role):
+    """
+    智慧替補推薦（最終版，含角色限制）
+    """
+    current_person = str(roster_df.at[chosen_role, chosen_day]).strip()
+    if not current_person or current_person == "X":
+        return None, "該時段目前無人值班"
+
+    is_assist_role = "Assist" in chosen_role
+
+    subs = []
+    for _, rec in students_df.iterrows():
+        name = str(rec["name"]).strip()
+        if not name or name == current_person:
+            continue
+        if chosen_day not in str(rec.get("available", "")).upper():
+            continue
+
+        # 角色限制
+        if is_assist_role and rec.get("role") != "Assistant Head Study Prefect":
+            continue
+        if not is_assist_role and rec.get("role") != "Study Prefect":
+            continue
+
+        subs.append({
+            "姓名": name,
+            "年級": rec.get("form", ""),
+            "當前總點數": float(rec.get("history_weight", 0.0))
+        })
+
+    if not subs:
+        return None, "找不到合適替補人員"
+
+    sub_df = pd.DataFrame(subs).sort_values(by="當前總點數")
+    return sub_df, None
