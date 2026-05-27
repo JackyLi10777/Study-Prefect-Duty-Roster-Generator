@@ -29,7 +29,7 @@ else:
     model = None
 
 # ==========================================
-# PDF 專用顏色樣式函數（已修正 border 寫法）
+# PDF 專用顏色樣式函數（已修正）
 # ==========================================
 def get_cell_style(val, role, day):
     val = str(val).strip()
