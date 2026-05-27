@@ -7,9 +7,9 @@ import io
 import json
 import base64
 
-from config import DAYS, ROWS_ROSTER, VERSION, APP_TITLE, NASA_COLORS
+from config import DAYS, ROWS_ROSTER, VERSION, APP_TITLE, NASA_COLORS, get_role_style
 from core import validate_and_compute, recommend_substitutes
-from utils import generate_pdf, export_system_backup, import_system_backup, process_roster_import
+from utils import generate_pdf
 from ui_components import render_sidebar, show_daily_verse, render_control_buttons
 
 # ==========================================
@@ -31,7 +31,6 @@ HELP_TEXT = """
 
 #### 4. 手動調整負荷指數
 - 在「🔧 手動調整本次值班負荷指數」表格可直接修改每個崗位的點數。
-- 清空儲存格不會出錯（已修復）。
 
 #### 5. 值班表操作
 - **視覺公告版**：NASA 深邃風格彩色顯示，不同崗位不同顏色，一目了然。
@@ -133,7 +132,7 @@ def main():
         if val == "":
             return f"background-color:{NASA_COLORS['empty_bg']}; text-align:center;"
 
-        style = get_role_style(role, day)  # 從 config 引入
+        style = get_role_style(role, day)
         return f"font-weight:bold; text-align:center; padding:8px 6px; background-color:{style['bg']}; color:{style['text']}; border:{style['border']};"
 
     with tab_view:
