@@ -29,7 +29,7 @@ else:
     model = None
 
 # ==========================================
-# PDF 專用顏色樣式函數（border 統一 2px + 沉穩專業版）
+# PDF 專用顏色樣式函數（已修正 border 寫法）
 # ==========================================
 def get_cell_style(val, role, day):
     val = str(val).strip()
@@ -49,7 +49,7 @@ def get_cell_style(val, role, day):
         f"font-weight:bold; text-align:center; padding:8px 6px; "
         f"background-color:{style['bg']}; "
         f"color:{style['text']}; "
-        f"border:2px solid {style.get('border_color', '#BDC3C7')};"
+        f"border:{style['border']};"
     )
 
 # ==========================================
@@ -195,7 +195,7 @@ def import_system_backup(uploaded_json_file):
         st.sidebar.error(f"❌ 還原失敗: {str(e)}")
 
 # ==========================================
-# A4 橫式彩色 PDF 生成引擎（border 2px + 沉穩專業版）
+# A4 橫式彩色 PDF 生成引擎（已修正）
 # ==========================================
 def generate_pdf(roster_df, master_report_df, logo_b64=None):
     if not PDF_AVAILABLE:
@@ -226,7 +226,6 @@ def generate_pdf(roster_df, master_report_df, logo_b64=None):
 
     # Data Rows
     for role in roster_df.index:
-        # 角色欄（第一列）
         html_table += f"<tr><td style='background-color:{NASA_COLORS['header_bg']}; color:{NASA_COLORS['accent_gold']}; font-weight:bold; padding:10px; text-align:center; border:2px solid {NASA_COLORS['accent_gold']};'>{role}</td>"
 
         for day in DAYS:
