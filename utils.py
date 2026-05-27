@@ -8,6 +8,7 @@ import base64
 import google.generativeai as genai
 
 from config import DAYS, ROWS_ROSTER, NASA_COLORS, get_role_style, GEMINI_MODEL
+from ai_parser import get_column_mapping_from_ai
 
 # ==========================================
 # PDF 支援強固檢查
@@ -32,6 +33,11 @@ else:
 # 單元格樣式計算核心（背景填充加強版）
 # ==========================================
 def compute_style_attributes(val, role, day):
+    """
+    高維度抽象核心：統一計算單元格的顏色與邊框屬性，
+    供 PDF 與 Streamlit 視覺控告板共用。
+    補回舊版所有狀態處理邏輯。
+    """
     val = str(val).strip()
 
     if val == "X":
@@ -66,6 +72,10 @@ def compute_style_attributes(val, role, day):
 # PDF 專用顏色樣式函數（背景色明顯加強版）
 # ==========================================
 def get_cell_style(val, role, day):
+    """
+    供 PDF 生成使用的單元格樣式字串。
+    背景色使用 !important 強制填充格子。
+    """
     attrs = compute_style_attributes(val, role, day)
     return (
         f"background-color: {attrs['bg']} !important; "
@@ -77,9 +87,30 @@ def get_cell_style(val, role, day):
     )
 
 # ==========================================
+# Streamlit 視覺控告板專用渲染器（補回舊版功能）
+# ==========================================
+def render_streamlit_visual_roster(df: pd.DataFrame):
+    """
+    供主界面使用的 Pandas Styler 渲染器，讓網頁視覺公告版也有完整顏色。
+    這是舊版本中「視覺控告板彩色顯示」功能的完整補回。
+    """
+    style_df = pd.DataFrame('', index=df.index, columns=df.columns)
+    for role in df.index:
+        for day in df.columns:
+            val = df.at[role, day]
+            attrs = compute_style_attributes(val, role, day)
+            style_df.at[role, day] = (
+                f"background-color: {attrs['bg']}; "
+                f"color: {attrs['text']}; "
+                f"font-weight: bold;"
+            )
+    return df.style.apply(lambda _: style_df, axis=None)
+
+# ==========================================
 # 名冊導入引擎（傳統格式）
 # ==========================================
 def process_roster_import(uploaded_file):
+    """傳統格式導入引擎（舊版功能完整保留）"""
     try:
         if uploaded_file.name.endswith('.csv'):
             df = pd.read_csv(uploaded_file)
@@ -122,9 +153,10 @@ def process_roster_import(uploaded_file):
         st.sidebar.error(f"❌ 導入失敗: {str(e)}")
 
 # ==========================================
-# AI 智能名冊導入（任意格式）
+# AI 智能名冊導入
 # ==========================================
 def smart_process_roster_import(uploaded_file):
+    """AI 智能名冊導入（舊版功能完整保留）"""
     try:
         if uploaded_file.name.endswith('.csv'):
             df = pd.read_csv(uploaded_file)
@@ -135,7 +167,6 @@ def smart_process_roster_import(uploaded_file):
             st.error("❌ 檔案為空或格式不正確")
             return
 
-        from ai_parser import get_column_mapping_from_ai
         mapping = get_column_mapping_from_ai(df)
 
         rename_dict = {v: k for k, v in mapping.items() if v in df.columns}
@@ -164,21 +195,24 @@ def smart_process_roster_import(uploaded_file):
         st.info("💡 提示：若 AI 無法解析，可使用傳統格式導入")
 
 # ==========================================
-# 系統完整備份 / 還原
+# 系統完整備份 / 還原（舊版功能完整保留）
 # ==========================================
 def export_system_backup(master_df):
+    """匯出完整系統備份（包含手動調整負荷）"""
     backup_data = {
         "master_report": master_df.to_dict(orient="records"),
         "roster_table": st.session_state.roster_df.to_dict(orient="index"),
         "manual_weights": st.session_state.get("manual_weights", pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)).to_dict(orient="index"),
-        "leave_tracker": st.session_state.leave_tracker_input
+        "leave_tracker": st.session_state.get("leave_tracker_input", [])
     }
     return json.dumps(backup_data, ensure_ascii=False, indent=2)
 
 def import_system_backup(uploaded_json_file):
+    """還原完整系統備份（補回舊版完整還原邏輯）"""
     try:
         data = json.load(uploaded_json_file)
         if "master_report" in data and "roster_table" in data:
+            # 還原學生名冊
             raw_master = pd.DataFrame(data["master_report"])
             mapping_reverse = {
                 "學生姓名 (Prefect Name)": "name",
@@ -203,14 +237,18 @@ def import_system_backup(uploaded_json_file):
 
             st.session_state.students_df = renamed_df[required_cols]
 
+            # 還原排班表
             restored_roster = pd.DataFrame.from_dict(data["roster_table"], orient="index")
             st.session_state.roster_df = restored_roster.reindex(index=ROWS_ROSTER, columns=DAYS).fillna("")
 
+            # 還原手動權重
             if "manual_weights" in data:
                 manual_df = pd.DataFrame.from_dict(data["manual_weights"], orient="index")
                 st.session_state.manual_weights = manual_df.reindex(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)
 
+            # 還原請假清單
             st.session_state.leave_tracker_input = data.get("leave_tracker", [])
+
             st.sidebar.success("🔮 備份已完美還原（包含手動調整負荷）！")
             st.rerun()
         else:
@@ -222,6 +260,7 @@ def import_system_backup(uploaded_json_file):
 # A4 橫式彩色 PDF 生成引擎（背景填充加強版）
 # ==========================================
 def generate_pdf(roster_df, master_report_df, logo_b64=None):
+    """最終 PDF 生成引擎（已加強背景色填充與列印色彩保留）"""
     if not PDF_AVAILABLE:
         st.error("❌ PDF 引擎未就緒，請確認 packages.txt 已加入 weasyprint 並重新部署")
         return None
