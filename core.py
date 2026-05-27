@@ -4,12 +4,13 @@ import random
 from config import DAYS, ROWS_ROSTER, WEIGHTS
 
 def generate_roster(students_df, leave_students, special_closures, seed):
-    """核心公平排班演算法 - 最完整版本"""
+    """核心公平排班演算法（已嚴格實作角色限制 + 同一天不可重複）"""
     random.seed(seed)
     roster = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
 
     leave_set = set(str(name).strip() for name in leave_students if str(name).strip())
 
+    # 建立學生資訊字典
     student_info = {}
     for _, row in students_df.iterrows():
         name = str(row["name"]).strip()
@@ -26,7 +27,11 @@ def generate_roster(students_df, leave_students, special_closures, seed):
     last_duty_day = {name: -1 for name in student_info.keys()}
 
     for day_idx, day in enumerate(DAYS):
+        # 記錄當天已被指派的人（用來嚴格避免同一天重複）
+        assigned_today = set()
+
         for role in ROWS_ROSTER:
+            # 特殊不開放
             if any(f"{day} - {role}" in sc for sc in special_closures):
                 roster.at[role, day] = "X"
                 continue
@@ -35,17 +40,31 @@ def generate_roster(students_df, leave_students, special_closures, seed):
                 roster.at[role, day] = "X"
                 continue
 
+            # ==================== 角色限制 ====================
+            is_assist_role = "Assist" in role
+
+            # 先處理固定值班
             assigned = False
             for name, info in student_info.items():
                 if info["fixed"] == day and name not in leave_set:
+                    # 角色檢查
+                    if is_assist_role and info["role"] != "Assistant Head Study Prefect":
+                        continue
+                    if not is_assist_role and info["role"] != "Study Prefect":
+                        continue
+                    if name in assigned_today:  # 同一天已排過
+                        continue
+
                     roster.at[role, day] = name
                     last_duty_day[name] = day_idx
+                    assigned_today.add(name)
                     assigned = True
                     break
 
             if assigned:
                 continue
 
+            # ==================== 一般排班 ====================
             candidates = []
             for name, info in student_info.items():
                 if name in leave_set:
@@ -54,12 +73,21 @@ def generate_roster(students_df, leave_students, special_closures, seed):
                     continue
                 if last_duty_day.get(name, -1) == day_idx - 1:
                     continue
+                if name in assigned_today:          # ★ 同一天不可重複
+                    continue
+
+                # ★ 嚴格角色限制
+                if is_assist_role and info["role"] != "Assistant Head Study Prefect":
+                    continue
+                if not is_assist_role and info["role"] != "Study Prefect":
+                    continue
 
                 is_junior = info["form"] == "F.3"
                 score = info["history_weight"] + random.uniform(0, 0.3)
 
-                if "Assist" in role and info["role"] == "Assistant Head Study Prefect":
-                    score -= 5.0
+                # Assistant Head 優先排 Assist. in charge
+                if is_assist_role and info["role"] == "Assistant Head Study Prefect":
+                    score -= 8.0
 
                 candidates.append((score, name, is_junior))
 
@@ -72,6 +100,7 @@ def generate_roster(students_df, leave_students, special_closures, seed):
 
             roster.at[role, day] = chosen
             last_duty_day[chosen] = day_idx
+            assigned_today.add(chosen)
 
     return roster
 
@@ -132,7 +161,6 @@ def validate_and_compute(roster_df, students_df, leave_students, manual_weights)
         for day in DAYS:
             for role in ROWS_ROSTER:
                 if str(roster_df.at[role, day]).strip() == name:
-                    # 加強防護：安全轉 float
                     val = manual_weights.at[role, day]
                     added = float(val) if pd.notna(val) else 0.0
                     total_weight += added
@@ -166,6 +194,8 @@ def recommend_substitutes(roster_df, students_df, chosen_day, chosen_role):
     if not current_person or current_person == "X":
         return None, "該時段目前無人值班"
 
+    is_assist_role = "Assist" in chosen_role
+
     subs = []
     for _, rec in students_df.iterrows():
         name = str(rec["name"]).strip()
@@ -173,7 +203,11 @@ def recommend_substitutes(roster_df, students_df, chosen_day, chosen_role):
             continue
         if chosen_day not in str(rec.get("available", "")).upper():
             continue
-        if rec.get("role") == "Assistant Head Study Prefect" and "Assist" not in chosen_role:
+
+        # 角色限制
+        if is_assist_role and rec.get("role") != "Assistant Head Study Prefect":
+            continue
+        if not is_assist_role and rec.get("role") != "Study Prefect":
             continue
 
         subs.append({
