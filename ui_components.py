@@ -5,7 +5,9 @@ import random
 import base64
 from io import BytesIO
 from datetime import datetime
-from config import DAYS, ROWS_ROSTER, VERSION, SCHOOL_EMAIL
+
+# ==================== 正確 import ====================
+from config import DAYS, ROWS_ROSTER, VERSION, DAILY_VERSES, SCHOOL_EMAIL
 from data import get_sample_excel_bytes
 from ai_parser import smart_process_roster_import, ai_parse_remarks
 from core import generate_roster, validate_and_compute, recommend_substitutes
@@ -18,6 +20,7 @@ from utils import (
 )
 
 def render_sidebar():
+    """側邊欄 - 完整功能"""
     st.sidebar.title("⚙️ 控制面板")
     
     # 校徽
@@ -27,7 +30,7 @@ def render_sidebar():
         st.session_state.logo_data = logo_file.getvalue()
         st.sidebar.image(logo_file, caption="已上傳", use_column_width=True)
 
-    # 名冊管理 + AI 導入
+    # 名冊管理 + AI
     st.sidebar.subheader("📋 名冊管理")
     uploaded = st.sidebar.file_uploader("上傳 Prefect 名冊", type=["xlsx", "csv"], key="roster_uploader")
     if uploaded:
@@ -56,9 +59,15 @@ def render_sidebar():
     st.sidebar.subheader("🛑 請假登記")
     if "students_df" in st.session_state and not st.session_state.students_df.empty:
         all_names = sorted(st.session_state.students_df["姓名"].tolist())
-        selected = st.sidebar.multiselect("選擇請假同學", all_names, default=st.session_state.get("leave_tracker_input", []), key="leave_multiselect")
+        selected = st.sidebar.multiselect(
+            "選擇請假同學", 
+            options=all_names, 
+            default=st.session_state.get("leave_tracker_input", []), 
+            key="leave_multiselect"
+        )
     else:
         selected = []
+    
     manual = st.sidebar.text_input("或手動輸入姓名（逗號分隔）", value="")
     if st.sidebar.button("✅ 確認請假名單", use_container_width=True):
         combined = list(dict.fromkeys(selected + [x.strip() for x in manual.split(",") if x.strip()]))
@@ -81,9 +90,13 @@ def render_sidebar():
     if "master_report_df" in st.session_state and not st.session_state.master_report_df.empty:
         total = st.session_state.master_report_df["最終總計加權負荷 (點)"].sum()
         st.sidebar.metric("全體總負荷點數", f"{total:.1f} 點")
-        st.sidebar.dataframe(st.session_state.master_report_df[["姓名", "最終總計加權負荷 (點)"]], hide_index=True, use_container_width=True)
+        st.sidebar.dataframe(
+            st.session_state.master_report_df[["姓名", "最終總計加權負荷 (點)"]],
+            hide_index=True,
+            use_container_width=True
+        )
 
-    # 備份
+    # 備份還原
     st.sidebar.write("---")
     if st.sidebar.button("📤 匯出完整備份", use_container_width=True):
         export_system_backup()
@@ -93,15 +106,27 @@ def render_sidebar():
 
 
 def show_daily_verse():
+    """每日聖經金句 - 已修正 NameError"""
     st.subheader("📖 每日聖經金句")
+    
     if "current_verse_index" not in st.session_state:
         st.session_state.current_verse_index = 0
+
     today = datetime.today().weekday()
     verses = DAILY_VERSES.get(today, DAILY_VERSES[0])
+    
+    # 安全保護
     if st.session_state.current_verse_index >= len(verses):
         st.session_state.current_verse_index = 0
+    
     current = verses[st.session_state.current_verse_index]
-    st.markdown(f'<div class="verse-card">{current}</div>', unsafe_allow_html=True)
+    
+    st.markdown(f"""
+    <div class="verse-card">
+        {current}
+    </div>
+    """, unsafe_allow_html=True)
+    
     if st.button("🔄 換一句金句", use_container_width=True, type="secondary"):
         st.session_state.current_verse_index = (st.session_state.current_verse_index + 1) % len(verses)
         st.rerun()
@@ -128,14 +153,17 @@ def render_control_buttons():
             st.success("已重置")
             st.rerun()
 
-    # 快速導出區
+    # 快速導出
     st.write("---")
     st.subheader("📤 快速導出")
     c1, c2, c3 = st.columns(3)
     with c1:
         if st.button("📄 匯出 PDF", use_container_width=True):
-            pdf_bytes = generate_pdf(st.session_state.roster_df, st.session_state.master_report_df, 
-                                     base64.b64encode(st.session_state.logo_data).decode() if st.session_state.get("logo_data") else None)
+            pdf_bytes = generate_pdf(
+                st.session_state.roster_df, 
+                st.session_state.master_report_df,
+                base64.b64encode(st.session_state.logo_data).decode() if st.session_state.get("logo_data") else None
+            )
             st.download_button("下載 PDF", pdf_bytes, "SYSS_Duty_Roster.pdf", "application/pdf", use_container_width=True)
     with c2:
         if st.button("📊 匯出 Excel", use_container_width=True):
