@@ -1,131 +1,145 @@
 # ai_parser.py
+# ==========================================
+# AI 智能名冊解析與備註分析模組
+# Gemini 3.5 Flash + 完整降級機制
+# ==========================================
 import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 import json
 from config import GEMINI_MODEL
 
-# ==========================================
-# Gemini AI 智能欄位映射引擎（舊版核心功能完整保留）
-# ==========================================
+# 初始化 Gemini（僅第一次執行）
+if "gemini_configured" not in st.session_state:
+    try:
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        st.session_state.gemini_configured = True
+    except Exception:
+        st.session_state.gemini_configured = False
+
+
 def get_column_mapping_from_ai(df: pd.DataFrame) -> dict:
-    """
-    使用 Gemini AI 智能辨識使用者上傳的任意格式 Excel/CSV，
-    自動對應到系統標準欄位名稱。
-    補回舊版本所有 AI 映射功能。
-    """
-    if df.empty or len(df.columns) < 2:
+    """使用 Gemini 智能判斷欄位對應"""
+    if not st.session_state.get("gemini_configured", False):
         return {}
 
-    # 準備給 AI 的樣本資料（取前 3 列作為範例）
-    sample = df.head(3).to_dict(orient="records")
-    sample_text = json.dumps(sample, ensure_ascii=False, indent=2)
+    sample_text = df.head(3).to_csv(index=False)
 
     prompt = f"""
-你是一位專業的 Excel 資料清理專家。
-以下是一個 DataFrame 的前 3 列資料（JSON 格式）：
-
+你是 Excel 欄位對應專家。
+以下是用戶上傳的名冊前 3 列資料（CSV格式）：
 {sample_text}
 
-請幫我把欄位名稱對應到以下標準欄位（只輸出 JSON，不要其他文字）：
+請嚴格按照以下 JSON 格式回傳欄位對應關係（不要有任何額外文字）：
 {{
-  "姓名": "name",
-  "年級": "form",
-  "班別": "class",
-  "職級": "role",
-  "學年固定總值班": "fixed_general_duty",
-  "可用日子": "available",
-  "歷史累計(次)": "history_duties",
-  "歷史動態(點)": "history_weight",
-  "備註": "remarks"
+  "姓名": "正確欄位名或 null",
+  "年級": "正確欄位名或 null",
+  "班別": "正確欄位名或 null",
+  "職級": "正確欄位名或 null",
+  "固定總值班": "正確欄位名或 null",
+  "可用日子": "正確欄位名或 null",
+  "歷史累計(次)": "正確欄位名或 null",
+  "歷史動態(點)": "正確欄位名或 null",
+  "備註": "正確欄位名或 null"
 }}
-
-如果某個欄位無法對應，請填 null。
-只輸出純 JSON 物件，不要任何解釋。
 """
 
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
         response = model.generate_content(prompt)
-        mapping_text = response.text.strip()
-
-        # 清理可能的多餘 markdown 標記
-        if mapping_text.startswith("```json"):
-            mapping_text = mapping_text.split("```json")[1].split("```")[0].strip()
-        elif mapping_text.startswith("```"):
-            mapping_text = mapping_text.split("```")[1].strip()
-
-        mapping = json.loads(mapping_text)
+        mapping_str = response.text.strip()
+        # 移除可能的多餘 markdown
+        if mapping_str.startswith("```json"):
+            mapping_str = mapping_str.split("```json")[1].split("```")[0]
+        elif mapping_str.startswith("```"):
+            mapping_str = mapping_str.split("```")[1]
+        mapping = json.loads(mapping_str)
         return mapping
-
     except Exception as e:
-        st.warning(f"⚠️ AI 欄位映射失敗，使用傳統映射方式。錯誤: {str(e)}")
-        # 回傳一個基礎映射作為降級方案
-        return {
-            "姓名": "name",
-            "name": "name",
-            "年級": "form",
-            "form": "form",
-            "班別": "class",
-            "class": "class",
-            "職級": "role",
-            "role": "role",
-            "備註": "remarks",
-            "remarks": "remarks"
-        }
+        st.warning(f"AI 欄位對應失敗，使用傳統映射。錯誤: {e}")
+        return {}
 
-# ==========================================
-# AI 智能解析備註欄（舊版核心功能完整保留）
-# ==========================================
-def ai_parse_remarks(remarks: str) -> dict:
-    """
-    使用 Gemini AI 智能解析「備註」欄位的文字，
-    自動判斷請假、特殊限制、優先級等。
-    這是舊版本中極重要的功能，已完整補回。
-    """
-    if not remarks or str(remarks).strip() == "":
-        return {"action": "none", "reason": ""}
 
-    prompt = f"""
-你是一位學校領袖生排班管理員。
-請解析以下備註文字，並以 JSON 格式回傳（只輸出 JSON，不要其他文字）：
+def smart_process_roster_import(uploaded_file) -> pd.DataFrame:
+    """AI 智能 + 傳統備援的名冊導入"""
+    if uploaded_file.name.endswith(".csv"):
+        df = pd.read_csv(uploaded_file)
+    else:
+        df = pd.read_excel(uploaded_file)
 
-備註：{remarks}
+    # 先嘗試 AI 智能對應
+    ai_mapping = get_column_mapping_from_ai(df)
 
-可能的判斷結果：
-- "action": "leave" （請假）
-- "action": "restricted_days" （限制某些日子）
-- "action": "priority" （優先排班）
-- "action": "none" （無特殊處理）
+    # 傳統強制映射（高容錯）
+    manual_mapping = {
+        "姓名": ["姓名", "name", "學生姓名", "Prefect Name"],
+        "年級": ["年級", "form", "Form"],
+        "班別": ["班別", "class", "Class"],
+        "職級": ["職級", "role", "Role"],
+        "固定總值班": ["固定總值班", "fixed_general_duty"],
+        "可用日子": ["可用日子", "available", "Available Days"],
+        "歷史累計(次)": ["歷史累計(次)", "history_duties"],
+        "歷史動態(點)": ["歷史動態(點)", "history_weight"],
+        "備註": ["備註", "remarks", "Remarks"]
+    }
 
-同時回傳 "reason" 說明原因。
-只輸出純 JSON，例如：{{"action": "leave", "reason": "生病請假一週"}}
-"""
+    final_mapping = {}
+    for target, candidates in manual_mapping.items():
+        for col in df.columns:
+            if any(cand.lower() in str(col).lower() for cand in candidates):
+                final_mapping[col] = target
+                break
+        # AI 優先覆蓋
+        if target in ai_mapping and ai_mapping[target]:
+            for col in df.columns:
+                if str(col).strip() == ai_mapping[target]:
+                    final_mapping[col] = target
+                    break
 
-    try:
-        model = genai.GenerativeModel(GEMINI_MODEL)
-        response = model.generate_content(prompt)
-        result_text = response.text.strip()
+    if final_mapping:
+        df = df.rename(columns={k: v for k, v in final_mapping.items() if v in df.columns})
 
-        # 清理 markdown
-        if result_text.startswith("```json"):
-            result_text = result_text.split("```json")[1].split("```")[0].strip()
-        elif result_text.startswith("```"):
-            result_text = result_text.split("```")[1].strip()
+    # 確保必要欄位存在
+    required = ["姓名", "年級", "職級", "可用日子"]
+    for col in required:
+        if col not in df.columns:
+            df[col] = ""
 
-        result = json.loads(result_text)
-        return result
+    return df
 
-    except Exception:
-        # 降級處理：當 AI 失敗時回傳安全預設值
-        return {"action": "none", "reason": "AI 解析失敗，使用手動處理"}
 
-# ==========================================
-# 公開的 AI 輔助函數（供 utils.py 呼叫）
-# ==========================================
-def smart_ai_column_mapping(df: pd.DataFrame) -> dict:
-    """
-    公開介面：供 utils.py 中的 smart_process_roster_import 呼叫。
-    這是舊版本中 AI 導入流程的核心橋接函數。
-    """
-    return get_column_mapping_from_ai(df)
+def ai_parse_remarks(students_df: pd.DataFrame) -> pd.DataFrame:
+    """AI 自動解析備註欄（偵測請假、固定值班等）"""
+    if not st.session_state.get("gemini_configured", False):
+        st.warning("AI 功能未啟用")
+        return students_df
+
+    df = students_df.copy()
+    if "備註" not in df.columns:
+        return df
+
+    for idx, row in df.iterrows():
+        remark = str(row.get("備註", "")).strip()
+        if not remark or remark == "nan":
+            continue
+
+        prompt = f"""
+        分析以下學生備註，判斷是否請假或有特殊固定值班：
+        備註：{remark}
+
+        只回傳純 JSON，不要任何其他文字：
+        {{"is_leave": true/false, "fixed_duty": "MONDAY,TUESDAY..." 或 null, "note": "簡短說明"}}
+        """
+
+        try:
+            model = genai.GenerativeModel(GEMINI_MODEL)
+            response = model.generate_content(prompt)
+            result = json.loads(response.text.strip())
+            if result.get("is_leave"):
+                df.at[idx, "備註"] = "請假"
+            if result.get("fixed_duty"):
+                df.at[idx, "固定總值班"] = result["fixed_duty"]
+        except:
+            continue  # 單筆失敗不影響整體
+
+    return df
