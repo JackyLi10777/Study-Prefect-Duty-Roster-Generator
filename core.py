@@ -1,180 +1,143 @@
 # core.py
 import pandas as pd
 import random
-from config import DAYS, ROWS_ROSTER, WEIGHTS
-from typing import List, Tuple, Optional, Dict
+from typing import List, Optional, Tuple
+import streamlit as st
+from config import DAYS, ROWS_ROSTER, WEIGHTS, DAILY_VERSES
 
-# ==========================================
-# 1. 主要排班演算法（最完整版）
-# ==========================================
 def generate_roster(
     students_df: pd.DataFrame,
     leave_students: List[str] = None,
-    seed: int = 42,
-    manual_weights: Optional[pd.DataFrame] = None
+    seed: int = 42
 ) -> pd.DataFrame:
-    """
-    核心排班演算法 - 完整公平分配 + 所有業務規則
-    """
+    """核心排班演算法 - 完整版（支援 Room 303 / Room 202 各需 2 人 + Tuesday/Friday Room202 自動留空）"""
+    if students_df.empty:
+        st.error("❌ 名冊為空，無法生成排班表")
+        return pd.DataFrame()
+
+    random.seed(seed)
     if leave_students is None:
         leave_students = []
-    
-    random.seed(seed)
+
     roster = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
-    
-    # 當天已排班人員（防止同一天同一人多次出現）
-    assigned_today: Dict[str, set] = {day: set() for day in DAYS}
-    
-    # 依歷史負荷由低到高排序（公平原則）
-    students = students_df.copy()
-    students["最終總計加權負荷 (點)"] = pd.to_numeric(
-        students.get("歷史動態(點)", students.get("歷史累計(點)", 0)), 
-        errors="coerce"
-    ).fillna(0.0)
-    
-    students = students.sort_values(by="最終總計加權負荷 (點)")
-    
-    for day in DAYS:
+
+    # 記錄每人當週已排班次數與最後值班日
+    weekly_count = {name: 0 for name in students_df["姓名"].tolist()}
+    last_duty_day = {name: -1 for name in students_df["姓名"].tolist()}
+
+    for day_idx, day in enumerate(DAYS):
+        assigned_today = set()
+
         for role in ROWS_ROSTER:
-            # Room 202 在星期二、五自動鎖定為 X
-            if "Room 202" in role and day in ["TUESDAY", "FRIDAY"]:
-                roster.at[role, day] = "X"
+            # Room 202 Tuesday / Friday 自動留空
+            if "Room202" in role and day in ["TUESDAY", "FRIDAY"]:
+                roster.at[role, day] = "⬜"
                 continue
-            
+
+            # 決定該崗位需要的人數
+            needed = 2 if any(x in role for x in ["Room303", "Room202"]) else 1
+
             candidates = []
-            for _, rec in students.iterrows():
-                name = str(rec["姓名"]).strip()
-                if name in leave_students or name in assigned_today[day]:
+            for _, rec in students_df.iterrows():
+                name = rec["姓名"]
+                if name in leave_students or name in assigned_today:
                     continue
-                if day.upper() not in str(rec.get("可用日子", "")).upper():
+                if day not in str(rec["可用日子"]).upper().split(","):
                     continue
-                
-                # Assistant Head / Head 只能排 Assist. in charge
-                role_lower = role.lower()
-                if ("Assistant Head" in rec["職級"] or "Head" in rec["職級"]) and "assist" not in role_lower:
+                if rec["職級"] == "Assistant Head Study Prefect" and "Assist" not in role:
                     continue
-                
-                candidates.append({
-                    "name": name,
-                    "weight": float(rec["最終總計加權負荷 (點)"]),
-                    "role": rec["職級"]
-                })
-            
-            if not candidates:
-                roster.at[role, day] = ""
-                continue
-            
-            # 按負荷由低到高排序，取最優
-            candidates.sort(key=lambda x: x["weight"])
-            chosen = candidates[0]
-            
-            roster.at[role, day] = chosen["name"]
-            assigned_today[day].add(chosen["name"])
-    
+                if rec["職級"] != "Assistant Head Study Prefect" and "Assist" in role:
+                    continue
+
+                # 連續值班懲罰 + 總負荷排序
+                consecutive_penalty = 10 if last_duty_day[name] == day_idx - 1 else 0
+                current_load = weekly_count[name] * 1.2 + rec["歷史動態(點)"]
+                score = current_load + consecutive_penalty
+                candidates.append((name, score, rec["年級"]))
+
+            # 排序後取前 needed 人
+            candidates.sort(key=lambda x: x[1])
+            selected = [c[0] for c in candidates[:needed]]
+
+            for name in selected:
+                roster.at[role, day] = name
+                assigned_today.add(name)
+                weekly_count[name] += WEIGHTS.get(role, 1.5)
+                last_duty_day[name] = day_idx
+
+            # 若人手不足
+            if len(selected) < needed:
+                roster.at[role, day] = f"❌ 缺{needed - len(selected)}人"
+
     return roster
 
 
-# ==========================================
-# 2. 驗證與計算（完整版）
-# ==========================================
-def validate_and_compute(
-    roster_df: pd.DataFrame,
-    students_df: pd.DataFrame,
-    leave_students: List[str],
-    manual_weights: pd.DataFrame
-) -> dict:
-    """
-    完整驗證 + 最終報告生成（包含所有舊版警告）
-    """
-    report = []
-    typo = []
-    duplicate = []
-    leave_conflict = []
-    vacuum = []
-    
-    for day in DAYS:
-        assigned = set()
-        for role in ROWS_ROSTER:
-            person = str(roster_df.at[role, day]).strip()
-            
-            if person == "X":
-                continue
-            if person == "":
-                vacuum.append(f"{day} - {role} 空白")
-                continue
-            
-            # 重複檢查
-            if person in assigned:
-                duplicate.append(f"{day} - {person} 重複排班")
-            assigned.add(person)
-            
-            # 請假衝突
-            if person in leave_students:
-                leave_conflict.append(f"{day} - {person} 已請假卻被排班")
-            
-            # 計算本次負荷
-            weight = WEIGHTS.get(role, 1.0)
-            if not manual_weights.empty and role in manual_weights.index and day in manual_weights.columns:
-                manual = float(manual_weights.at[role, day])
-                if manual > 0:
-                    weight = manual
-            
-            report.append({
-                "學生姓名 (Prefect Name)": person,
-                "日期": day,
-                "崗位": role,
-                "本次加權負荷": weight
-            })
-    
-    report_df = pd.DataFrame(report)
-    if not report_df.empty:
-        report_df = report_df.groupby("學生姓名 (Prefect Name)")["本次加權負荷"].sum().reset_index()
-        report_df = report_df.rename(columns={"本次加權負荷": "最終總計加權負荷 (點)"})
-    
-    return {
-        "report_df": report_df,
-        "typo": (len(typo) > 0, typo),
-        "duplicate": (len(duplicate) > 0, duplicate),
-        "leave_conflict": (len(leave_conflict) > 0, leave_conflict),
-        "vacuum": (len(vacuum) > 0, vacuum)
-    }
+def validate_and_compute(roster_df: pd.DataFrame, students_df: pd.DataFrame, leave_students: List[str]) -> Tuple[pd.DataFrame, List[str], List[str]]:
+    """驗證並計算累計負荷"""
+    errors = []
+    warnings = []
+
+    # 1. 重複值班檢查
+    for day in roster_df.columns:
+        assigned = roster_df[day].dropna().tolist()
+        if len(assigned) != len(set(assigned)):
+            errors.append(f"星期{day} 出現重複值班")
+
+    # 2. 空缺檢查
+    for role, row in roster_df.iterrows():
+        for day, val in row.items():
+            if pd.isna(val) or val == "":
+                if not ("Room202" in role and day in ["TUESDAY", "FRIDAY"]):
+                    warnings.append(f"{role} - {day} 尚有空缺")
+
+    # 3. 生成累計報表
+    report = students_df.copy()
+    report["本週值班次數"] = 0
+    report["本週加權負荷"] = 0.0
+
+    for _, row in roster_df.iterrows():
+        for val in row:
+            if isinstance(val, str) and val.strip() and val not in ["⬜", "❌"]:
+                name = val.strip()
+                idx = report[report["姓名"] == name].index
+                if not idx.empty:
+                    report.loc[idx, "本週值班次數"] += 1
+                    role_weight = next((w for r, w in WEIGHTS.items() if r in row.name), 1.5)
+                    report.loc[idx, "本週加權負荷"] += role_weight
+
+    report["最終總計加權負荷 (點)"] = report["歷史動態(點)"] + report["本週加權負荷"]
+    return report, errors, warnings
 
 
-# ==========================================
-# 3. 智慧替補推薦（完整版）
-# ==========================================
 def recommend_substitutes(
     roster_df: pd.DataFrame,
     students_df: pd.DataFrame,
     chosen_day: str,
     chosen_role: str
 ) -> Tuple[Optional[pd.DataFrame], str]:
-    """
-    推薦最優替補人員（依總點數由低到高）
-    """
+    """智慧替補推薦 - 按總負荷由低到高排序"""
     current_person = str(roster_df.at[chosen_role, chosen_day]).strip()
-    if not current_person or current_person == "X":
-        return None, "該時段目前無人當值或已鎖定"
-    
+    if not current_person or current_person in ["⬜", "❌"]:
+        return None, "該時段目前無人值班"
+
     subs = []
     for _, rec in students_df.iterrows():
-        name = str(rec["姓名"]).strip()
+        name = rec["姓名"]
         if name == current_person:
             continue
-        if chosen_day.upper() not in str(rec.get("可用日子", "")).upper():
+        if chosen_day not in str(rec["可用日子"]).upper():
             continue
-        # Assistant Head 只能替補 Assist 崗位
-        if "Assistant Head" in str(rec.get("職級", "")) and "Assist" not in chosen_role:
+        if rec["職級"] == "Assistant Head Study Prefect" and "Assist" not in chosen_role:
             continue
-        
+
         subs.append({
             "姓名": name,
-            "年級": rec.get("年級", ""),
-            "當前總點數": float(rec.get("歷史動態(點)", rec.get("歷史累計(點)", 0)))
+            "年級": rec["年級"],
+            "當前總點數": rec["歷史動態(點)"] + 1.0  # 預估本次
         })
-    
+
     if not subs:
-        return None, "找不到合適的替補人員"
-    
+        return None, "找不到合適替補人員"
+
     sub_df = pd.DataFrame(subs).sort_values(by="當前總點數")
     return sub_df, ""
