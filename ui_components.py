@@ -2,148 +2,139 @@
 import streamlit as st
 import pandas as pd
 import random
-import datetime
+import base64
+from io import BytesIO
+from datetime import datetime
+from config import DAYS, ROWS_ROSTER, VERSION, DAILY_VERSES
+from data import get_sample_excel_bytes
+from ai_parser import smart_process_roster_import, ai_parse_remarks
+from utils import export_system_backup, import_system_backup
 
-from config import DAYS, ROWS_ROSTER, DAILY_VERSES, VERSION, SCHOOL_EMAIL
-from data import get_demo_dataframe, get_sample_excel_bytes
-from utils import export_system_backup, import_system_backup, process_roster_import, smart_process_roster_import, render_streamlit_visual_roster
-from core import generate_roster
-
-# ==========================================
-# 側邊欄渲染（舊版完整 UI 功能補回）
-# ==========================================
 def render_sidebar():
-    """
-    完整側邊欄介面，包含名冊管理、AI/傳統導入、即時編輯、請假登記、備份還原等舊版所有功能。
-    """
-    st.sidebar.header("🛠️ 系統控制面板")
+    """側邊欄 - 簡約沉穩風格"""
+    st.sidebar.title("⚙️ 控制面板")
 
-    # 名冊管理區塊
-    st.sidebar.subheader("📋 Prefect 名冊管理")
-    uploaded_roster = st.sidebar.file_uploader(
-        "上傳 Prefect 名冊 (Excel/CSV)", 
-        type=["csv", "xlsx", "xls"], 
-        key="roster_uploader"
-    )
+    # 校徽上傳
+    st.sidebar.subheader("🦅 校徽")
+    logo_file = st.sidebar.file_uploader("上傳學校校徽 (PNG)", type=["png"], key="logo_uploader")
+    if logo_file:
+        st.session_state.logo_data = logo_file.getvalue()
+        st.sidebar.image(logo_file, caption="已上傳校徽", use_column_width=True)
+    elif st.session_state.get("logo_data"):
+        st.sidebar.image(BytesIO(st.session_state.logo_data), caption="目前校徽", use_column_width=True)
 
-    col1, col2 = st.sidebar.columns(2)
-    with col1:
-        if st.sidebar.button("🤖 AI 智能導入", use_container_width=True):
-            if uploaded_roster is not None:
-                smart_process_roster_import(uploaded_roster)
-            else:
-                st.sidebar.warning("請先上傳檔案")
-    with col2:
-        if st.sidebar.button("📥 傳統格式導入", use_container_width=True):
-            if uploaded_roster is not None:
-                process_roster_import(uploaded_roster)
-            else:
-                st.sidebar.warning("請先上傳檔案")
+    # 名冊管理
+    st.sidebar.subheader("📋 名冊管理")
+    uploaded = st.sidebar.file_uploader("上傳 Prefect 名冊", type=["xlsx", "csv"], key="roster_uploader")
+    if uploaded:
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            if st.button("🤖 AI 智能解析", use_container_width=True):
+                st.session_state.students_df = smart_process_roster_import(uploaded)
+                st.success("AI 解析完成")
+        with col2:
+            if st.button("📥 傳統解析", use_container_width=True):
+                st.session_state.students_df = process_roster_import(uploaded)   # 請確保 app.py 中有此函數
 
-    # 下載範例檔
     if st.sidebar.button("📥 下載名冊格式範例", use_container_width=True):
-        bytes_data = get_sample_excel_bytes()
         st.sidebar.download_button(
-            label="✅ 下載範例 Excel",
-            data=bytes_data,
-            file_name="Prefect_名冊導入格式範例.xlsx",
+            label="下載 Excel 範例",
+            data=get_sample_excel_bytes(),
+            file_name="Prefect_名冊格式範例.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
 
-    # 名冊即時編輯
-    st.sidebar.subheader("✏️ 名冊即時編輯")
-    if not st.session_state.students_df.empty:
-        edited_df = st.sidebar.data_editor(
-            st.session_state.students_df,
-            use_container_width=True,
-            hide_index=True,
-            key="student_editor"
+    # 請假登記（多選下拉 + 手動輸入）
+    st.sidebar.subheader("🛑 請假登記")
+    if "students_df" in st.session_state and not st.session_state.students_df.empty:
+        all_names = sorted(st.session_state.students_df["姓名"].tolist())
+        selected = st.sidebar.multiselect(
+            "選擇請假同學",
+            options=all_names,
+            default=st.session_state.get("leave_tracker_input", []),
+            key="leave_multiselect"
         )
-        if not edited_df.equals(st.session_state.students_df):
-            st.session_state.students_df = edited_df
-            st.sidebar.success("名冊已更新")
+    else:
+        selected = []
+    
+    manual = st.sidebar.text_input("或手動輸入姓名（逗號分隔）", value="")
+    if st.sidebar.button("✅ 確認請假名單", use_container_width=True):
+        combined = list(dict.fromkeys(selected + [x.strip() for x in manual.split(",") if x.strip()]))
+        st.session_state.leave_tracker_input = combined
+        st.success(f"已登記 {len(combined)} 位請假同學")
+
+    # AI 分析備註
+    st.sidebar.subheader("🔍 AI 分析備註")
+    if st.sidebar.button("🤖 AI 自動解析所有備註", use_container_width=True):
+        if "students_df" in st.session_state and not st.session_state.students_df.empty:
+            with st.spinner("AI 解析中..."):
+                st.session_state.students_df = ai_parse_remarks(st.session_state.students_df)
+            st.success("AI 已完成備註解析")
             st.rerun()
 
-    # 請假追蹤
-    st.sidebar.subheader("🛡️ 請假登記")
-    leave_input = st.sidebar.text_area(
-        "輸入請假同學姓名（每行一位）",
-        value="\n".join(st.session_state.get("leave_tracker_input", [])),
-        key="leave_input"
-    )
-    if st.sidebar.button("✅ 儲存請假名單"):
-        st.session_state.leave_tracker_input = [line.strip() for line in leave_input.split("\n") if line.strip()]
-        st.sidebar.success("請假名單已儲存")
+    # 即時累計指數（已還原）
+    st.sidebar.write("---")
+    st.sidebar.subheader("📊 即時累計指數")
+    if "master_report_df" in st.session_state and not st.session_state.master_report_df.empty:
+        total = st.session_state.master_report_df["最終總計加權負荷 (點)"].sum()
+        st.sidebar.metric("全體總負荷點數", f"{total:.1f} 點")
+        st.sidebar.dataframe(
+            st.session_state.master_report_df[["學生姓名 (Prefect Name)", "最終總計加權負荷 (點)"]],
+            hide_index=True,
+            use_container_width=True
+        )
+    else:
+        st.sidebar.info("尚未生成排班表")
 
     # 備份還原
-    st.sidebar.subheader("💾 Cloud 備份")
-    col_backup1, col_backup2 = st.sidebar.columns(2)
-    with col_backup1:
-        if st.sidebar.button("📤 匯出備份"):
-            if not st.session_state.get("master_report_df", pd.DataFrame()).empty:
-                backup_str = export_system_backup(st.session_state.master_report_df)
-                st.sidebar.download_button(
-                    "下載備份 JSON",
-                    backup_str,
-                    f"backup_{datetime.date.today().strftime('%Y%m%d')}.json",
-                    "application/json",
-                    use_container_width=True
-                )
-    with col_backup2:
-        uploaded_backup = st.sidebar.file_uploader("上傳備份 JSON", type=["json"], key="backup_uploader")
-        if uploaded_backup is not None and st.sidebar.button("📥 還原備份"):
-            import_system_backup(uploaded_backup)
+    st.sidebar.write("---")
+    if st.sidebar.button("📤 匯出完整備份", use_container_width=True):
+        export_system_backup()
+    uploaded_backup = st.sidebar.file_uploader("📥 還原備份", type=["json"], key="backup_uploader")
+    if uploaded_backup and st.sidebar.button("還原備份", use_container_width=True):
+        import_system_backup(uploaded_backup)
 
-    st.sidebar.caption(f"版本 {VERSION}")
 
-# ==========================================
-# 每日聖經金句顯示（舊版功能完整保留）
-# ==========================================
 def show_daily_verse():
-    """
-    顯示每日聖經金句（舊版每日靈修功能完整保留）
-    """
-    today = datetime.date.today().weekday()
+    """每日聖經金句 - 神聖莊重版"""
+    st.subheader("📖 每日聖經金句")
+    
+    if "current_verse_index" not in st.session_state:
+        st.session_state.current_verse_index = random.randint(0, len(DAILY_VERSES[0]) - 1)
+    
+    today = datetime.today().weekday()
     verses = DAILY_VERSES.get(today, DAILY_VERSES[0])
-    verse = random.choice(verses)
+    current = verses[st.session_state.current_verse_index]
+    
     st.markdown(f"""
-    <div style="background-color:#0B1E3D; color:#D4AF37; padding:15px; border-radius:10px; text-align:center; margin:10px 0;">
-        <strong>📖 今日金句</strong><br>
-        {verse}
+    <div class="verse-card">
+        {current}
     </div>
     """, unsafe_allow_html=True)
+    
+    if st.button("🔄 換一句金句", use_container_width=True, type="secondary"):
+        st.session_state.current_verse_index = random.randint(0, len(verses) - 1)
+        st.rerun()
 
-# ==========================================
-# 控制按鈕區塊（舊版所有控制功能完整保留）
-# ==========================================
+
 def render_control_buttons():
-    """
-    主畫面控制按鈕區塊，包含生成、清空、重置、匯出等舊版核心功能。
-    """
-    st.subheader("🎛️ 排班控制")
-
+    """控制按鈕區"""
     col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("🚀 智能計算：生成本週全新公平值班表", type="primary", use_container_width=True):
-            st.session_state.roster_df = generate_roster(
-                st.session_state.students_df,
-                st.session_state.get("leave_tracker_input", []),
-                seed=random.randint(10000, 99999)
-            )
-            st.success("✅ 值班表已生成！")
+        if st.button("🚀 智能計算本週排班", type="primary", use_container_width=True):
+            st.session_state.roster_df = generate_roster(st.session_state.students_df, st.session_state.get("leave_tracker_input", []))
+            st.success("排班表已生成")
             st.rerun()
-
     with col2:
-        if st.button("🧹 一鍵清空本週排班表", use_container_width=True):
+        if st.button("🧹 一鍵清空本週排班", type="secondary", use_container_width=True):
             st.session_state.roster_df = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
-            st.success("✅ 排班表已清空")
+            st.success("已清空本週排班表")
             st.rerun()
-
     with col3:
-        if st.button("🔄 重置所有手動調整", use_container_width=True):
-            st.session_state.manual_weights = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)
-            st.success("✅ 手動調整已重置")
+        if st.button("🔄 重置所有數據", use_container_width=True):
+            for key in list(st.session_state.keys()):
+                if key != "logo_data":
+                    del st.session_state[key]
+            st.success("所有數據已重置")
             st.rerun()
-
-    return None
