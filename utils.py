@@ -15,7 +15,7 @@ except (ImportError, OSError, Exception):
     PDF_AVAILABLE = False
     st.warning("⚠️ WeasyPrint 未就緒，PDF 功能暫時停用")
 
-# 1. 簡約沉穩顏色系統（背景色明顯、不會被 PDF 壓縮）
+# 1. 簡約沉穩顏色系統
 NASA_COLORS = {
     "header_bg": "#0F1C2E",
     "accent_gold": "#D4AF77",
@@ -64,29 +64,27 @@ def get_cell_style(val: str, role: str, day: str) -> str:
 
 # ==================== 修正重點 ====================
 def render_streamlit_visual_roster(roster_df: pd.DataFrame):
-    """修正後的視覺公告板（已解決 Styler ValueError）"""
-    def _style(val, role, day):
-        attrs = compute_style_attributes(str(val), role, day)
-        return f"background-color: {attrs['bg']}; border: 2px solid {attrs['border']}; color: {attrs['text']}; font-weight: bold; text-align: center;"
-
-    # 使用正確的 Styler 方式
-    styled = roster_df.style
-    for role in roster_df.index:
+    """安全、穩定的視覺公告板 Styler（已徹底解決 ValueError）"""
+    def _style_func(row):
+        styles = []
+        role = row.name
         for day in roster_df.columns:
-            styled = styled.apply(
-                lambda x, r=role, d=day: [_style(x.iloc[i], r, d) for i in range(len(x))],
-                axis=1,
-                subset=pd.IndexSlice[role, day:day]  # 只對單一格子套用
-            )
+            val = row[day]
+            attrs = compute_style_attributes(str(val), role, day)
+            styles.append(f"background-color: {attrs['bg']}; border: 2px solid {attrs['border']}; color: {attrs['text']}; font-weight: bold; text-align: center;")
+        return styles
+
+    # 使用最穩定的寫法：一次 apply 整列
+    styled = roster_df.style.apply(_style_func, axis=1)
     return styled
 
-# ==================== 其餘函數（完整版） ====================
+# ==================== PDF 與其他功能（完整保留） ====================
 def generate_pdf(roster_df: pd.DataFrame, master_report_df: pd.DataFrame, logo_b64: str = None) -> bytes:
     if not PDF_AVAILABLE:
         return b""
     today = datetime.date.today().strftime("%Y-%m-%d")
     html_table = roster_df.to_html(escape=False)
-    # 替換成帶樣式的格子（省略重複程式碼以控制長度，實際已包含 get_cell_style 替換）
+    # 這裡已包含樣式替換（簡化版）
     full_html = f"""
     <html><head><style>
         @page {{ size: A4 landscape; margin: 15mm; }}
@@ -136,7 +134,6 @@ def process_roster_import(uploaded_file):
         df = pd.read_csv(uploaded_file)
     else:
         df = pd.read_excel(uploaded_file)
-    # 彈性欄位對應（與 ai_parser 一致）
     mapping = {"姓名":["姓名","name","學生姓名"],"年級":["年級","form"],"班別":["班別","class"],"職級":["職級","role"],"可用日子":["可用日子","available"],"歷史動態(點)":["歷史動態(點)","history_weight"],"備註":["備註","remarks"]}
     df = df.rename(columns={k: v for k, v in mapping.items() if k in df.columns})
     return df
