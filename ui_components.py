@@ -5,15 +5,15 @@ import random
 import base64
 from io import BytesIO
 from datetime import datetime
-from config import DAYS, ROWS_ROSTER, VERSION, DAILY_VERSES
+from config import DAYS, ROWS_ROSTER, VERSION, DAILY_VERSES, SCHOOL_EMAIL
 from data import get_sample_excel_bytes
 from ai_parser import smart_process_roster_import, ai_parse_remarks
-from utils import export_system_backup, import_system_backup
+from utils import export_system_backup, import_system_backup, process_roster_import
 
 def render_sidebar():
-    """側邊欄 - 簡約沉穩風格"""
+    """側邊欄 - 完整功能（包含即時統計、手動調整提示）"""
     st.sidebar.title("⚙️ 控制面板")
-
+    
     # 校徽上傳
     st.sidebar.subheader("🦅 校徽")
     logo_file = st.sidebar.file_uploader("上傳學校校徽 (PNG)", type=["png"], key="logo_uploader")
@@ -32,9 +32,12 @@ def render_sidebar():
             if st.button("🤖 AI 智能解析", use_container_width=True):
                 st.session_state.students_df = smart_process_roster_import(uploaded)
                 st.success("AI 解析完成")
+                st.rerun()
         with col2:
             if st.button("📥 傳統解析", use_container_width=True):
-                st.session_state.students_df = process_roster_import(uploaded)   # 請確保 app.py 中有此函數
+                st.session_state.students_df = process_roster_import(uploaded)
+                st.success("傳統解析完成")
+                st.rerun()
 
     if st.sidebar.button("📥 下載名冊格式範例", use_container_width=True):
         st.sidebar.download_button(
@@ -45,7 +48,7 @@ def render_sidebar():
             use_container_width=True
         )
 
-    # 請假登記（多選下拉 + 手動輸入）
+    # 請假登記
     st.sidebar.subheader("🛑 請假登記")
     if "students_df" in st.session_state and not st.session_state.students_df.empty:
         all_names = sorted(st.session_state.students_df["姓名"].tolist())
@@ -63,6 +66,7 @@ def render_sidebar():
         combined = list(dict.fromkeys(selected + [x.strip() for x in manual.split(",") if x.strip()]))
         st.session_state.leave_tracker_input = combined
         st.success(f"已登記 {len(combined)} 位請假同學")
+        st.rerun()
 
     # AI 分析備註
     st.sidebar.subheader("🔍 AI 分析備註")
@@ -73,14 +77,14 @@ def render_sidebar():
             st.success("AI 已完成備註解析")
             st.rerun()
 
-    # 即時累計指數（已還原）
+    # 即時累計指數
     st.sidebar.write("---")
     st.sidebar.subheader("📊 即時累計指數")
     if "master_report_df" in st.session_state and not st.session_state.master_report_df.empty:
         total = st.session_state.master_report_df["最終總計加權負荷 (點)"].sum()
         st.sidebar.metric("全體總負荷點數", f"{total:.1f} 點")
         st.sidebar.dataframe(
-            st.session_state.master_report_df[["學生姓名 (Prefect Name)", "最終總計加權負荷 (點)"]],
+            st.session_state.master_report_df[["姓名", "最終總計加權負荷 (點)"]],
             hide_index=True,
             use_container_width=True
         )
@@ -97,14 +101,19 @@ def render_sidebar():
 
 
 def show_daily_verse():
-    """每日聖經金句 - 神聖莊重版"""
+    """每日聖經金句 - 神聖莊重版 + 安全 IndexError 防護"""
     st.subheader("📖 每日聖經金句")
     
     if "current_verse_index" not in st.session_state:
-        st.session_state.current_verse_index = random.randint(0, len(DAILY_VERSES[0]) - 1)
-    
+        st.session_state.current_verse_index = 0
+
     today = datetime.today().weekday()
     verses = DAILY_VERSES.get(today, DAILY_VERSES[0])
+    
+    # 安全處理 index（避免 IndexError）
+    if not verses or st.session_state.current_verse_index >= len(verses):
+        st.session_state.current_verse_index = 0
+    
     current = verses[st.session_state.current_verse_index]
     
     st.markdown(f"""
@@ -114,7 +123,7 @@ def show_daily_verse():
     """, unsafe_allow_html=True)
     
     if st.button("🔄 換一句金句", use_container_width=True, type="secondary"):
-        st.session_state.current_verse_index = random.randint(0, len(verses) - 1)
+        st.session_state.current_verse_index = (st.session_state.current_verse_index + 1) % len(verses)
         st.rerun()
 
 
@@ -134,7 +143,7 @@ def render_control_buttons():
     with col3:
         if st.button("🔄 重置所有數據", use_container_width=True):
             for key in list(st.session_state.keys()):
-                if key != "logo_data":
+                if key not in ["logo_data"]:
                     del st.session_state[key]
             st.success("所有數據已重置")
             st.rerun()
