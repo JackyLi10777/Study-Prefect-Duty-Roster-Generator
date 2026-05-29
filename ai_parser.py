@@ -1,12 +1,10 @@
 # ai_parser.py
 """
 聖言中學導學風紀當值排班平台 (Sing Yin Secondary School Study Prefect Duty Roster Platform)
-AI 智能解析模組 - Gemini 驅動的名冊導入與 Remarks 智能解析
+AI 智能解析模組 - Remarks 自動解析 + 智能名冊欄位映射
 
 作者：Head Study Prefect 26-27 LI Chuangjie Jacky
-版本：v2.1 Final
-目的：提供 Gemini AI 智能解析 Remarks 欄位，以及任意格式 Excel/CSV 的智能欄位映射。
-      支援 AI 自動更新 fixed_general_duty、available、role，並嚴格遵守學校規則。
+版本：v2.3 Final（已完整整合最新 ROOMS_CONFIG 與業務規則）
 """
 
 import streamlit as st
@@ -15,22 +13,15 @@ import google.generativeai as genai
 import json
 import re
 
-from config import GEMINI_MODEL
+from config import GEMINI_MODEL, ROOMS_CONFIG
 
-
-# ====================== Gemini 配置（Cloud 安全檢查） ======================
-if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"].strip():
-    try:
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        model = genai.GenerativeModel(GEMINI_MODEL)
-        GEMINI_READY = True
-    except Exception:
-        model = None
-        GEMINI_READY = False
+# ====================== Gemini 配置 ======================
+if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    model = genai.GenerativeModel(GEMINI_MODEL)
 else:
     model = None
-    GEMINI_READY = False
-
+    st.warning("⚠️ Gemini API 未設定，AI 功能將無法使用")
 
 # ====================== AI 系統提示 - Remarks 智能解析 ======================
 REMARKS_SYSTEM_PROMPT = """
@@ -43,11 +34,7 @@ REMARKS_SYSTEM_PROMPT = """
 - "available": 可用日子 → 用逗號分隔，例如 "MONDAY,WEDNESDAY,FRIDAY"
 - "role": 職級 → "Study Prefect" 或 "Assistant Head Study Prefect"
 
-關鍵字判斷邏輯（請嚴格遵守）：
-- 包含「Assistant Head」「副總」「助理總」→ role = "Assistant Head Study Prefect"
-- 包含「老帶新」「F.3」「新任」「帶新生」→ 優先考慮 role 與 available
-- 包含「固定星期X」「固定值班」→ 對應 fixed_general_duty
-- 包含「Room302 優先」「Room303 經驗」→ 可用日子優先包含相關星期
+如果備註中提到「老帶新」「新任」「F.3」「Assistant Head」「固定值班」「Room302 優先」「Room303 經驗豐富」「領導核心」「老帶新」等關鍵字，請合理判斷並更新。
 
 範例輸入：
 remarks: "老帶新，F.3 優先，固定星期三值班，領導核心"
@@ -61,69 +48,6 @@ remarks: "老帶新，F.3 優先，固定星期三值班，領導核心"
 
 請嚴格遵守，只輸出 JSON。
 """
-
-
-def ai_parse_remarks(students_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    使用 Gemini AI 解析 Remarks 欄位，並自動更新 fixed_general_duty、available、role
-    進度條 + 單筆失敗不中斷 + markdown 清理 + 嚴格錯誤處理
-    """
-    if not GEMINI_READY or model is None:
-        st.error("❌ Gemini API 未設定，請在 .streamlit/secrets.toml 加入 GEMINI_API_KEY")
-        return students_df
-
-    if students_df.empty or "remarks" not in students_df.columns:
-        st.warning("名冊為空或缺少 remarks 欄位，無法進行 AI 解析")
-        return students_df
-
-    updated_df = students_df.copy()
-    progress_bar = st.progress(0)
-    total_rows = len(students_df)
-
-    for idx, row in students_df.iterrows():
-        remarks = str(row.get("remarks", "")).strip()
-        if not remarks or remarks.lower() in ["nan", ""]:
-            progress_bar.progress((idx + 1) / total_rows)
-            continue
-
-        try:
-            prompt = f"{REMARKS_SYSTEM_PROMPT}\n\n備註內容：{remarks}"
-            response = model.generate_content(prompt)
-            json_text = response.text.strip()
-
-            # 清理可能的 markdown 包裝與多餘文字
-            if json_text.startswith("```json"):
-                json_text = json_text.split("```json")[1].split("```")[0].strip()
-            elif json_text.startswith("```"):
-                json_text = json_text.split("```")[1].strip()
-
-            json_text = re.sub(r'^.*?\{', '{', json_text, flags=re.DOTALL)
-            json_text = re.sub(r'\}.*?$', '}', json_text, flags=re.DOTALL)
-
-            parsed = json.loads(json_text)
-
-            # 更新欄位（安全更新）
-            if "fixed_general_duty" in parsed and parsed["fixed_general_duty"]:
-                updated_df.at[idx, "fixed_general_duty"] = str(parsed["fixed_general_duty"]).upper()
-            if "available" in parsed and parsed["available"]:
-                updated_df.at[idx, "available"] = str(parsed["available"]).upper()
-            if "role" in parsed and parsed["role"]:
-                role_str = str(parsed["role"]).strip()
-                if "Assistant" in role_str or "副總" in role_str:
-                    updated_df.at[idx, "role"] = "Assistant Head Study Prefect"
-                else:
-                    updated_df.at[idx, "role"] = "Study Prefect"
-
-        except Exception as e:
-            st.warning(f"第 {idx+2} 行 Remarks 解析失敗（已跳過）：{str(e)[:80]}")
-            pass
-
-        progress_bar.progress((idx + 1) / total_rows)
-
-    progress_bar.empty()
-    st.success("✅ AI 已成功解析並更新 Remarks 欄位（fixed_general_duty / available / role）")
-    return updated_df
-
 
 # ====================== AI 系統提示 - 智能名冊導入欄位映射 ======================
 IMPORT_MAPPING_PROMPT = """
@@ -148,23 +72,72 @@ IMPORT_MAPPING_PROMPT = """
 {
   "name": "實際欄位名稱",
   "form": "實際欄位名稱",
-  "class": "實際欄位名稱",
-  "role": "實際欄位名稱",
-  "fixed_general_duty": "實際欄位名稱",
-  "available": "實際欄位名稱",
-  "history_duties": "實際欄位名稱",
-  "history_weight": "實際欄位名稱",
-  "remarks": "實際欄位名稱"
+  ...
 }
 """
+
+# ====================== 核心函數 ======================
+def ai_parse_remarks(students_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    使用 Gemini AI 解析 Remarks 欄位，並自動更新 fixed_general_duty、available、role
+    """
+    if model is None:
+        st.error("❌ Gemini API 未設定，請在 .streamlit/secrets.toml 加入 GEMINI_API_KEY")
+        return students_df
+
+    if students_df.empty:
+        st.warning("名冊為空，無法進行 AI 解析")
+        return students_df
+
+    updated_df = students_df.copy()
+    progress_bar = st.progress(0)
+    total_rows = len(students_df)
+
+    for idx, row in students_df.iterrows():
+        remarks = str(row.get("remarks", "")).strip()
+        if not remarks or remarks.lower() in ["nan", "", "none"]:
+            progress_bar.progress((idx + 1) / total_rows)
+            continue
+
+        try:
+            prompt = f"{REMARKS_SYSTEM_PROMPT}\n\n備註內容：{remarks}"
+            response = model.generate_content(prompt)
+            json_text = response.text.strip()
+
+            # 清理可能的 markdown 包裝
+            if json_text.startswith("```json"):
+                json_text = json_text.split("```json")[1].split("```")[0].strip()
+            elif json_text.startswith("```"):
+                json_text = json_text.split("```")[1].strip()
+
+            parsed = json.loads(json_text)
+
+            # 更新欄位
+            if "fixed_general_duty" in parsed and parsed["fixed_general_duty"]:
+                updated_df.at[idx, "fixed_general_duty"] = str(parsed["fixed_general_duty"]).upper()
+            if "available" in parsed and parsed["available"]:
+                updated_df.at[idx, "available"] = str(parsed["available"]).upper()
+            if "role" in parsed and parsed["role"]:
+                updated_df.at[idx, "role"] = str(parsed["role"])
+
+        except Exception as e:
+            # 單筆失敗不中斷整體流程
+            st.warning(f"第 {idx+1} 筆 Remarks 解析失敗: {str(e)}")
+            pass
+
+        progress_bar.progress((idx + 1) / total_rows)
+
+    progress_bar.empty()
+    st.success("✅ AI 已成功解析並更新 Remarks 欄位")
+    return updated_df
 
 
 def get_column_mapping_from_ai(df: pd.DataFrame) -> dict:
     """
     使用 Gemini 分析表格前幾行，自動產生欄位映射
     """
-    if not GEMINI_READY or model is None:
-        raise Exception("Gemini API 未設定，請在 .streamlit/secrets.toml 加入 GEMINI_API_KEY")
+    if model is None:
+        raise Exception("Gemini API 未設定")
 
     sample_text = df.head(8).to_string(index=False)
     prompt = IMPORT_MAPPING_PROMPT.format(table_sample=sample_text)
@@ -172,25 +145,13 @@ def get_column_mapping_from_ai(df: pd.DataFrame) -> dict:
     response = model.generate_content(prompt)
     json_text = response.text.strip()
 
+    # 清理 markdown
     if json_text.startswith("```json"):
         json_text = json_text.split("```json")[1].split("```")[0].strip()
     elif json_text.startswith("```"):
         json_text = json_text.split("```")[1].strip()
 
-    mapping = json.loads(json_text)
-    return mapping
+    return json.loads(json_text)
 
 
-# ====================== 模組自我驗證 ======================
-def validate_ai_parser():
-    """模組載入時自動驗證"""
-    if GEMINI_READY:
-        print("✅ ai_parser.py 驗證通過 - Gemini AI 功能已就緒")
-    else:
-        print("⚠️ ai_parser.py 驗證通過 - Gemini API 未設定（傳統導入仍正常運作）")
-
-
-if __name__ != "__main__":
-    validate_ai_parser()
-
-print("✅ ai_parser.py 已載入完成 - AI 智能解析與名冊導入模組就緒")
+print("✅ ai_parser.py 已載入完成 - AI 智能解析模組就緒")
