@@ -3,20 +3,10 @@
 聖言中學導學風紀當值排班平台 (Sing Yin Secondary School Study Prefect Duty Roster Platform)
 工具函數模組 - PDF 生成、系統備份/還原、名冊導入引擎
 
-作者：資深 Python + Streamlit 工程師 (10+ 年經驗)
-版本：v2.1 Final (NASA Deep Space Edition - 2026-05-30)
-目的：提供完整的 PDF 公告版生成、JSON 完整備份/還原（徹底解決 Streamlit Cloud 休眠資料遺失）、
-      傳統與 AI 智能名冊導入引擎。
-      100% 保留 Optimized Base Blueprint + 歷史代碼 + 最初專案所有功能，
-      並與 config.py、core.py、ai_parser.py 完美整合。
-
-核心功能（全部實現，零功能流失）：
-- generate_pdf()：專業 A4 橫式 PDF（含校徽、角色背景色、聖經金句、神聖莊重風格）
-- export_system_backup() / import_system_backup()：完整 JSON 備份（roster + manual_weights + leave + report）
-- process_roster_import()：傳統 Excel/CSV 導入
-- smart_process_roster_import()：AI 智能欄位映射（呼叫 ai_parser）
-- get_cell_style()：PDF 與 Web 視覺完全一致
-- Streamlit Cloud 完全相容（weasyprint 強固檢查、secrets 處理）
+作者：Head Study Prefect 26-27 LI Chuangjie Jacky
+版本：v2.1 Final
+目的：提供完整的 PDF 公告版生成、JSON 完整備份/還原、傳統與 AI 智能名冊導入引擎。
+      徹底解決 Streamlit Cloud 休眠資料遺失問題。
 """
 
 import streamlit as st
@@ -80,7 +70,6 @@ def process_roster_import(uploaded_file):
         else:
             df = pd.read_excel(uploaded_file)
 
-        # 智能欄位映射（支援中文、英文、各種常見命名）
         mapping = {
             '姓名': 'name', 'name': 'name', 'Prefect Name': 'name', '學生姓名': 'name',
             '年級': 'form', 'form': 'form', 'Form': 'form',
@@ -95,7 +84,6 @@ def process_roster_import(uploaded_file):
 
         df = df.rename(columns=lambda x: mapping.get(str(x).strip(), str(x).strip()))
 
-        # 補齊缺失欄位（防止錯誤）
         required_cols = ["name", "form", "class", "role", "fixed_general_duty", "available", "history_duties", "history_weight", "remarks"]
         for col in required_cols:
             if col not in df.columns:
@@ -124,7 +112,7 @@ def process_roster_import(uploaded_file):
         st.error(f"❌ 傳統導入失敗：{str(e)}")
 
 
-# ====================== AI 智能名冊導入（呼叫 ai_parser） ======================
+# ====================== AI 智能名冊導入 ======================
 def smart_process_roster_import(uploaded_file):
     """
     AI 智能名冊導入 - 使用 Gemini 自動映射欄位
@@ -135,13 +123,10 @@ def smart_process_roster_import(uploaded_file):
         else:
             df = pd.read_excel(uploaded_file)
 
-        # 呼叫 AI 取得欄位映射
         mapping = get_column_mapping_from_ai(df)
 
-        # 套用映射
         df = df.rename(columns=mapping)
 
-        # 補齊缺失欄位
         required_cols = ["name", "form", "class", "role", "fixed_general_duty", "available", "history_duties", "history_weight", "remarks"]
         for col in required_cols:
             if col not in df.columns:
@@ -168,11 +153,10 @@ def smart_process_roster_import(uploaded_file):
         st.rerun()
     except Exception as e:
         st.error(f"❌ AI 智能導入失敗：{str(e)}")
-        # 降級使用傳統導入
         process_roster_import(uploaded_file)
 
 
-# ====================== 系統完整備份 / 還原（解決 Cloud 休眠問題） ======================
+# ====================== 系統完整備份 / 還原 ======================
 def export_system_backup(master_report_df: pd.DataFrame) -> str:
     """
     導出完整系統狀態（roster + manual_weights + leave + report）
@@ -196,21 +180,17 @@ def import_system_backup(uploaded_json_file):
     try:
         data = json.load(uploaded_json_file)
 
-        # 還原 roster
         if "roster_table" in data:
             restored_roster = pd.DataFrame.from_dict(data["roster_table"], orient="index")
             st.session_state.roster_df = restored_roster.reindex(index=ROWS_ROSTER, columns=DAYS).fillna("")
 
-        # 還原 manual_weights
         if "manual_weights" in data:
             restored_weights = pd.DataFrame.from_dict(data["manual_weights"], orient="index")
             st.session_state.manual_weights = restored_weights.reindex(index=ROWS_ROSTER, columns=DAYS).fillna(0.0).astype(float)
 
-        # 還原 leave_tracker
         if "leave_tracker" in data:
             st.session_state.leave_tracker_input = data["leave_tracker"]
 
-        # 還原 students_df
         if "students_df" in data:
             st.session_state.students_df = pd.DataFrame(data["students_df"])
 
@@ -223,7 +203,7 @@ def import_system_backup(uploaded_json_file):
 # ====================== PDF 公告版生成引擎 ======================
 def generate_pdf(roster_df: pd.DataFrame, master_report_df: pd.DataFrame, logo_b64: str = None) -> bytes | None:
     """
-    生成專業 A4 橫式 PDF 公告版（含校徽、角色顏色、聖經金句、神聖莊重風格）
+    生成專業 A4 橫式 PDF 公告版
     """
     if not PDF_AVAILABLE:
         st.error("PDF 引擎未就緒，請確認 packages.txt 已加入 weasyprint")
@@ -231,10 +211,7 @@ def generate_pdf(roster_df: pd.DataFrame, master_report_df: pd.DataFrame, logo_b
 
     today = datetime.date.today().strftime("%Y-%m-%d")
 
-    # 建立 HTML 表格
     html_table = roster_df.to_html(classes='table', escape=False)
-
-    # 建立審計表
     report_table = ""
     if not master_report_df.empty:
         report_table = master_report_df[["學生姓名 (Prefect Name)", "年級 (Form)", "班別 (Class)", "職級 (Role)", "當週新增 (次)", "最終總計加權負荷 (點)"]].to_html(index=False, classes='table', escape=False)
@@ -279,7 +256,7 @@ def generate_pdf(roster_df: pd.DataFrame, master_report_df: pd.DataFrame, logo_b
         {report_table}
 
         <div style="margin-top:40px; text-align:center; font-size:10px; color:#666;">
-            聖言中學導學風紀組 | {VERSION} | 公平・專業・神聖
+            聖言中學導學風紀組 | {VERSION}
         </div>
     </body>
     </html>
@@ -295,7 +272,6 @@ def generate_pdf(roster_df: pd.DataFrame, master_report_df: pd.DataFrame, logo_b
 
 # ====================== 模組自我驗證 ======================
 def validate_utils_module():
-    """模組載入時自動驗證"""
     print("✅ utils.py 驗證通過 - PDF 生成、備份還原、名冊導入引擎全部就緒")
 
 
