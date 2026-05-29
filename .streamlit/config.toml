@@ -1,34 +1,39 @@
-# ==========================================
 # .streamlit/config.toml
-# Sing Yin Study Prefect Duty Roster 專用配置
-# 版本：v1.3 模組化 + AI 智能解析版
-# ==========================================
+# Sing Yin Secondary School Study Prefect Duty Roster Platform
+# 聖言中學導學風紀當值排班平台 - Streamlit Cloud 專用設定檔
+# 作者：Head Study Prefect 26-27 LI Chuangjie Jacky
+# 版本：v2.1 Final
+
+[theme]
+primaryColor = "#0B1E3D"
+backgroundColor = "#F8F9FA"
+secondaryBackgroundColor = "#F1F3F5"
+textColor = "#1A1A2E"
+base = "light"
 
 [server]
 headless = true
 port = 8501
-address = "0.0.0.0"
 enableCORS = false
 enableXsrfProtection = false
-maxUploadSize = 50
-maxMessageSize = 500
+maxUploadSize = 10
 
-[theme]
-primaryColor = "#0C2340"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F8F1E3"
-textColor = "#1F2937"
-base = "light"
-font = "sans-serif"
-
-[ui]
-hideSidebarNav = false
-hideTopBar = false
-hideGitHubButton = false
+[client]
+showSidebarNavigation = true
+showErrorDetails = false
 
 [logger]
-level = "INFO"
-messageFormat = "%(asctime)s | %(levelname)s | %(message)s"
+level = "ERROR"
+messageFormat = " %(asctime)s - %(levelname)s - %(message)s"
+
+[runner]
+fastReruns = true
+magicEnabled = false
 
 [browser]
 gatherUsageStats = false
+serverAddress = "0.0.0.0"
+
+[ui]
+hideTopBar = "true"
+hideSidebarNav = "false"
