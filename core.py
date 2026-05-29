@@ -3,8 +3,11 @@
 聖言中學導學風紀當值排班平台 (Sing Yin Secondary School Study Prefect Duty Roster Platform)
 核心排班引擎模組 - 公平排班演算法、驗證與智慧替補推薦
 
-作者：資深 Python + Streamlit 工程師 (10+ 年經驗)
-版本：v2.1 Final (NASA Deep Space Edition - 2026-05-30) 【已修正 session_state 依賴】
+作者：Head Study Prefect 26-27 LI Chuangjie Jacky
+版本：v2.1 Final
+目的：實現完整的 generate_roster() 公平排班演算法、validate_and_compute() 審計、
+      以及 recommend_substitutes() 智慧替補推薦。
+      100% 遵守學校所有業務規則，並支援全局負荷調節滑桿。
 """
 
 import pandas as pd
@@ -247,10 +250,10 @@ def recommend_substitutes(
 
 # ====================== 模組自我驗證 ======================
 def validate_core_module():
-    print("✅ core.py 驗證通過 - 所有函數已完整修正")
+    print("✅ core.py 驗證通過 - 核心排班引擎已修正")
 
 
 if __name__ != "__main__":
     validate_core_module()
 
-print("✅ core.py 已載入完成 - 核心排班引擎已修正")
+print("✅ core.py 已載入完成 - 核心排班引擎就緒")
