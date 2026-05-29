@@ -51,7 +51,7 @@ HELP_TEXT = """
 - 點擊主畫面大按鈕「🚀 智能計算：生成本週全新公平值班表」。
 
 #### 4. 手動調整負荷指數
-- 在「🔧 手動調整本次值班負荷指數」表格可直接修改每個崗位的點數（臨近考試可提高整體負荷達成公平平衡）。
+- 可使用上方全局滑桿快速調整整體負荷，或下方表格針對個別崗位精細微調。
 
 #### 5. 值班表操作
 - **視覺公告版**：專業彩色顯示，不同崗位不同顏色，一目了然。
@@ -95,6 +95,8 @@ def main():
         st.session_state.master_report_df = pd.DataFrame()
     if 'manual_weights' not in st.session_state:
         st.session_state.manual_weights = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)
+    if 'global_load_multiplier' not in st.session_state:
+        st.session_state.global_load_multiplier = 1.0
 
     render_sidebar()
 
@@ -104,7 +106,6 @@ def main():
 
     show_daily_verse()
 
-    # 使用說明書
     with st.expander("📖 點此展開完整使用說明書（v2.1 Final）", expanded=False):
         st.markdown(HELP_TEXT)
 
@@ -173,11 +174,28 @@ def main():
             st.session_state.roster_df = edited_roster
             st.rerun()
 
-    # 手動調整負荷
+    # ====================== 手動調整本次值班負荷指數 ======================
     st.write("---")
     st.subheader("🔧 手動調整本次值班負荷指數")
-    st.caption("針對每個崗位本次值班，手動修改累計負荷點數")
+    st.caption("可同時使用全局滑桿快速調整整體負荷，或下方表格針對個別崗位精細微調")
 
+    # 新增：全局負荷調節滑桿（更直觀）
+    col_slider, col_info = st.columns([3, 1])
+    with col_slider:
+        global_multiplier = st.slider(
+            "全域負荷倍率（影響本次所有值班點數）",
+            min_value=0.8,
+            max_value=2.0,
+            value=1.0,
+            step=0.05,
+            format="%.2f",
+            key="global_load_multiplier"
+        )
+    with col_info:
+        st.metric("目前全域倍率", f"{global_multiplier:.2f}×", help="臨近考試時可調高，讓累計點數較低的同學更快達到平衡")
+
+    # 保留原本的個別崗位微調表格
+    st.caption("個別崗位精細調整（可覆蓋全局倍率）")
     manual_col = st.data_editor(
         st.session_state.manual_weights,
         use_container_width=True,
@@ -187,8 +205,10 @@ def main():
         st.session_state.manual_weights = manual_col.astype(float).fillna(0.0)
         st.rerun()
 
-    # 累計審計表 + 公平性圖表 + 智慧替補 + 快速導出
-    # （以下內容與之前版本完全相同，僅移除 NASA 相關文字）
+    # 儲存全局倍率
+    st.session_state.global_load_multiplier = global_multiplier
+
+    # 累計審計表
     st.write("---")
     st.subheader("📊 累計動態工作負荷審計表")
     if not st.session_state.master_report_df.empty:
@@ -196,6 +216,7 @@ def main():
     else:
         st.info("請先生成排班表以顯示審計表")
 
+    # 公平性圖表
     if not st.session_state.master_report_df.empty:
         st.write("---")
         st.subheader("🦅 全體累積工作點數公平性監控")
@@ -211,6 +232,7 @@ def main():
         fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig, use_container_width=True)
 
+    # 智慧替補
     st.write("---")
     st.subheader("🔍 智慧替補推薦")
     c1, c2 = st.columns(2)
@@ -230,6 +252,7 @@ def main():
         else:
             st.warning(error_msg)
 
+    # 快速導出
     st.write("---")
     st.subheader("📤 快速導出")
     col1, col2, col3 = st.columns(3)
