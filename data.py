@@ -23,7 +23,7 @@ def get_demo_dataframe() -> pd.DataFrame:
 def get_sample_format_dataframe() -> pd.DataFrame:
     # 完整範例（所有字串均已正確閉合）
     sample_data = [
-        {"姓名": "李創杰", "年級": "F.5", "班別": "4E", "職級": "Assistant Head Study Prefect", "學年固定總值班": "NONE", "可用日子": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY", "歷史累計(次)": 12, "歷史動態(點)": 18.5, "備註": "老帶新"},
+        {"姓名": "李創杰", "年級": "F.5", "班別": "5D", "職級": "Assistant Head Study Prefect", "學年固定總值班": "NONE", "可用日子": "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY", "歷史累計(次)": 12, "歷史動態(點)": 18.5, "備註": "老帶新"},
         # ... 其他範例資料
     ]
     return pd.DataFrame(sample_data)
