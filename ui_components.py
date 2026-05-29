@@ -1,7 +1,7 @@
 # ui_components.py
 """
 聖言中學導學風紀當值排班平台 (Sing Yin Secondary School Study Prefect Duty Roster Platform)
-UI 元件模組 - 側邊欄、每日聖經金句、控制按鈕等前端組件
+UI 元件模組
 """
 
 import streamlit as st
@@ -32,7 +32,6 @@ for day_list in DAILY_VERSES.values():
 
 
 def show_daily_verse():
-    """顯示每日聖經金句 + 刷新按鈕"""
     if "current_verse" not in st.session_state or st.session_state.current_verse is None:
         st.session_state.current_verse = random.choice(ALL_VERSES)
 
@@ -50,7 +49,6 @@ def show_daily_verse():
 
 
 def render_sidebar():
-    """側邊欄完整功能"""
     with st.sidebar:
         st.header("🏫 Sing Yin Secondary School")
 
