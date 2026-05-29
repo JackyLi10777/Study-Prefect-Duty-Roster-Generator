@@ -2,19 +2,6 @@
 """
 聖言中學導學風紀當值排班平台 (Sing Yin Secondary School Study Prefect Duty Roster Platform)
 UI 元件模組 - 側邊欄、每日聖經金句、控制按鈕等前端組件
-
-作者：資深 Python + Streamlit 工程師 (10+ 年經驗)
-版本：v2.1 Final (NASA Deep Space Edition - 2026-05-30)
-目的：提供完整的 render_sidebar()、show_daily_verse()、render_control_buttons()
-      完美整合 NASA Deep Space 風格、DAILY_VERSES.docx 完整金句、AI 解析、Cloud 備份等功能。
-
-核心特點（100% 實現）：
-- show_daily_verse() 使用 DAILY_VERSES.docx 完整五天擴充版金句（神聖莊重風格 + 隨機刷新）
-- render_sidebar() 包含 Logo 切換、即時統計、名冊管理（傳統 + AI）、即時編輯、AI 解析 Remarks、請假登記、Cloud 備份
-- render_control_buttons() 包含特殊不開放時段、多欄按鈕、生成排班、一鍵清空確認
-- 所有 UI 均使用 config.py 中的 NASA_COLORS 與業務常數
-- 支援 Streamlit Cloud 完全相容（session_state、rerun、安全處理）
-- 保留歷史版本所有優點 + 最新版所有 bug 修復
 """
 
 import streamlit as st
@@ -23,7 +10,6 @@ import datetime
 import io
 import random
 
-# ====================== 從各模組引入必要元件 ======================
 from config import (
     DAYS, ROWS_ROSTER, DAILY_VERSES, VERSION, APP_TITLE,
     NASA_COLORS, PROJECT_FULL_NAME, SCHOOL_NAME
@@ -40,14 +26,13 @@ from data import get_demo_dataframe, get_sample_format_dataframe
 from ai_parser import ai_parse_remarks
 
 
-# ====================== 合併所有金句供隨機刷新使用 ======================
 ALL_VERSES = []
 for day_list in DAILY_VERSES.values():
     ALL_VERSES.extend(day_list)
 
 
 def show_daily_verse():
-    """顯示每日聖經金句 + 刷新按鈕（使用 DAILY_VERSES.docx 完整版，神聖莊重風格）"""
+    """顯示每日聖經金句 + 刷新按鈕"""
     if "current_verse" not in st.session_state or st.session_state.current_verse is None:
         st.session_state.current_verse = random.choice(ALL_VERSES)
 
@@ -65,11 +50,10 @@ def show_daily_verse():
 
 
 def render_sidebar():
-    """側邊欄完整功能（最終優化版）"""
+    """側邊欄完整功能"""
     with st.sidebar:
         st.header("🏫 Sing Yin Secondary School")
 
-        # Logo 顯示開關 + 上傳
         show_logo = st.checkbox("🖼️ 顯示校徽（畫面與 PDF）", value=True, key="show_logo_toggle")
 
         uploaded_logo = st.file_uploader("上傳自訂校徽 (PNG)", type=["png"], key="logo_uploader")
@@ -99,24 +83,17 @@ def render_sidebar():
         st.write("---")
         st.subheader("🗄️ 名冊管理")
 
-        # 一鍵載入示範名冊
         if st.button("💡 一鍵載入官方示範名冊", use_container_width=True):
             st.session_state.students_df = get_demo_dataframe()
             st.success("✅ 示範名冊已載入")
             st.rerun()
 
-        # 下載格式範例
         if st.button("📥 下載名冊格式範例", use_container_width=True):
             sample_df = get_sample_format_dataframe()
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 sample_df.to_excel(writer, index=False)
-            st.download_button(
-                "✅ 下載範例檔",
-                output.getvalue(),
-                "Prefect_名冊格式範例.xlsx",
-                use_container_width=True
-            )
+            st.download_button("✅ 下載範例檔", output.getvalue(), "Prefect_名冊格式範例.xlsx", use_container_width=True)
 
         uploaded_roster = st.file_uploader("上傳名冊 (Excel/CSV)", type=["csv", "xlsx", "xls"], key="roster_importer")
 
@@ -175,13 +152,7 @@ def render_sidebar():
 
         if st.button("⬇️ 導出完整備份 (JSON)", use_container_width=True):
             backup_json = export_system_backup(st.session_state.get("master_report_df", pd.DataFrame()))
-            st.download_button(
-                "✅ 下載備份檔",
-                backup_json,
-                f"SYSS_Backup_{datetime.date.today().strftime('%Y%m%d')}.json",
-                "application/json",
-                use_container_width=True
-            )
+            st.download_button("✅ 下載備份檔", backup_json, f"SYSS_Backup_{datetime.date.today().strftime('%Y%m%d')}.json", "application/json", use_container_width=True)
 
         uploaded_backup = st.file_uploader("上傳備份 JSON 還原", type=["json"], key="backup_importer")
         if uploaded_backup and st.button("🔄 還原備份", use_container_width=True):
@@ -191,7 +162,7 @@ def render_sidebar():
 
 
 def render_control_buttons():
-    """主畫面控制按鈕（含特殊不開放時段與生成按鈕）"""
+    """主畫面控制按鈕"""
     closure_options = [f"{d} - {room}" for d in DAYS for room in ["Room302", "Room303", "Room202"]
                        if not (room == "Room202" and d in ["TUESDAY", "FRIDAY"])]
     selected_closures = st.multiselect("🛠️ 本週特殊不開放時段", options=closure_options, key="special_closures")
@@ -206,7 +177,9 @@ def render_control_buttons():
                     st.session_state.students_df,
                     st.session_state.leave_tracker_input,
                     selected_closures,
-                    seed
+                    seed,
+                    current_roster_df=st.session_state.roster_df,
+                    global_load_multiplier=st.session_state.get("global_load_multiplier", 1.0)
                 )
                 st.success(f"✅ 排班完成！驗證碼: SY-{seed}")
 
@@ -228,12 +201,4 @@ def render_control_buttons():
     return selected_closures
 
 
-# ====================== 模組自我驗證 ======================
-def validate_ui_components() -> None:
-    print("✅ ui_components.py 驗證通過 - 側邊欄、每日金句、控制按鈕全部就緒")
-
-
-if __name__ != "__main__":
-    validate_ui_components()
-
-print("✅ ui_components.py 已載入完成 - 完整前端 UI 組件全部就緒")
+print("✅ ui_components.py 已載入完成")
