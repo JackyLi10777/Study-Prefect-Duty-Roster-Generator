@@ -3,18 +3,10 @@
 聖言中學導學風紀當值排班平台 (Sing Yin Secondary School Study Prefect Duty Roster Platform)
 AI 智能解析模組 - Gemini 驅動的名冊導入與 Remarks 智能解析
 
-作者：資深 Python + Streamlit 工程師 (10+ 年經驗)
-版本：v2.1 Final (NASA Deep Space Edition - 2026-05-30)
+作者：Head Study Prefect 26-27 LI Chuangjie Jacky
+版本：v2.1 Final
 目的：提供 Gemini AI 智能解析 Remarks 欄位，以及任意格式 Excel/CSV 的智能欄位映射。
-      完美整合 Optimized Base Blueprint + 歷史代碼 + 最初專案所有 AI 功能，
-      支援 AI 自動更新 fixed_general_duty、available、role，並嚴格遵守 Assistant Head 限制等學校規則。
-
-核心功能（全部實現，零功能流失）：
-- ai_parse_remarks()：使用 Gemini 解析備註，自動更新欄位（含老帶新、F.3 優先等關鍵字）
-- get_column_mapping_from_ai()：智能名冊導入，支援任意欄位名稱與順序
-- 強固錯誤處理、JSON 清理、進度條、單筆失敗不中斷整體流程
-- 與 config.py、data.py 完全相容（使用 GEMINI_MODEL、ROOMS_CONFIG 間接驗證）
-- Streamlit Cloud 完全相容（secrets.toml 檢查、 graceful fallback）
+      支援 AI 自動更新 fixed_general_duty、available、role，並嚴格遵守學校規則。
 """
 
 import streamlit as st
@@ -105,7 +97,6 @@ def ai_parse_remarks(students_df: pd.DataFrame) -> pd.DataFrame:
             elif json_text.startswith("```"):
                 json_text = json_text.split("```")[1].strip()
 
-            # 移除可能的非 JSON 文字
             json_text = re.sub(r'^.*?\{', '{', json_text, flags=re.DOTALL)
             json_text = re.sub(r'\}.*?$', '}', json_text, flags=re.DOTALL)
 
@@ -124,7 +115,6 @@ def ai_parse_remarks(students_df: pd.DataFrame) -> pd.DataFrame:
                     updated_df.at[idx, "role"] = "Study Prefect"
 
         except Exception as e:
-            # 單筆失敗不中斷整體流程，只記錄
             st.warning(f"第 {idx+2} 行 Remarks 解析失敗（已跳過）：{str(e)[:80]}")
             pass
 
@@ -182,7 +172,6 @@ def get_column_mapping_from_ai(df: pd.DataFrame) -> dict:
     response = model.generate_content(prompt)
     json_text = response.text.strip()
 
-    # 清理 markdown
     if json_text.startswith("```json"):
         json_text = json_text.split("```json")[1].split("```")[0].strip()
     elif json_text.startswith("```"):
