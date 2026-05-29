@@ -1,176 +1,70 @@
-# app.py
-"""
-聖言中學導學風紀當值排班平台
-Sing Yin Secondary School Study Prefect Duty Roster Platform
-最終主程式（v2.3 Final）
+# Sing Yin Secondary School Study Prefect Duty Roster Platform  
+**聖言中學導學風紀當值排班平台**
 
-作者：Head Study Prefect 26-27 LI Chuangjie Jacky
-完全符合「根本編程誡命」：專業、美觀、即時互動、100% Streamlit Cloud 相容
-"""
+**專為聖言中學 Study Prefect Team 打造的專業、公平、穩定排班管理系統**
 
-import streamlit as st
-import pandas as pd
-import json
-import datetime
-from typing import Optional
+**版本**：v2.3 Final  
+**作者**：Head Study Prefect 26-27 LI Chuangjie Jacky  
+**部署平台**：Streamlit Cloud（已徹底解決休眠資料遺失問題）
 
-# ====================== 導入所有模組 ======================
-from config import (
-    APP_TITLE, PROJECT_FULL_NAME, VERSION, DAYS, ROWS_ROSTER,
-    DAILY_VERSES, NASA_COLORS, get_role_style
-)
-from data import get_demo_dataframe, initialize_session_state
-from ai_parser import parse_ai_excel, generate_roster_from_ai
-from core import generate_roster, calculate_audit_report, recommend_substitutes
-from utils import (
-    generate_pdf, export_to_excel, export_to_markdown,
-    export_system_backup, import_system_backup, process_roster_import
-)
-from ui_components import (
-    display_colored_roster,
-    student_management_panel,
-    global_multiplier_slider,
-    substitute_recommendation_panel,
-    download_section
-)
+---
 
-# ====================== 頁面設定 ======================
-st.set_page_config(
-    page_title=APP_TITLE,
-    page_icon="🛡️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+## ✨ 主要功能
 
-# ====================== 初始化 Session State ======================
-initialize_session_state()
+- **AI 智能名冊導入**：支援任意格式 Excel / CSV，Gemini AI 自動匹配欄位與解析備註
+- **公平排班演算法**：歷史負荷 + 全局負荷倍率滑桿（0.5~2.5×）+ F.3 老帶新優先
+- **嚴格遵守校規**：
+  - Assistant Head Study Prefect 只能排 "Assist. in charge"
+  - Room 302（每日 1 人）、Room 303（每日 2 人）、Room 202（每日 2 人）
+  - Room 202 星期二、四常規不開放顯示 ⬜
+  - 每人每日僅能值班一次
+- **全局負荷調節滑桿**：主畫面即時調整倍率，考試週可提高負荷讓累計較低同學快速平衡
+- **智慧替補推薦**：請假時自動推薦最低累計負荷學生
+- **完整視覺公告版**：角色背景色區分（Assist 金米、302 綠、303 黃、202 紅）
+- **專業 PDF 匯出**：含校徽、彩色表格、每日聖經金句，適合列印公告
+- **多格式下載**：PDF、Excel、Markdown
+- **雲端備份 / 還原**：完整 JSON 備份，徹底解決 Streamlit Cloud 休眠資料遺失
+- **每日聖經金句**：自動隨機顯示 + 莊重神聖區塊
+- **即時統計與公平監控**：側邊欄 + Plotly 柱狀圖
+- **響應式介面**：電腦與行動裝置皆友好
 
-# ====================== 側邊欄 ======================
-with st.sidebar:
-    st.image("https://via.placeholder.com/150x150/0B1E3D/FFFFFF?text=SYSS", width=150)
-    st.title("🛡️ 導學風紀")
-    st.caption(f"**{PROJECT_FULL_NAME}**  v{VERSION}")
+---
 
-    # 每日金句
-    today = datetime.date.today().weekday() % 5
-    verse = DAILY_VERSES.get(today, ["「你要專心仰賴耶和華...」——箴言 3:5"])[0]
-    st.markdown(f"""
-    <div style="background: linear-gradient(135deg, #1C2526, #2C3E50); color:#F4D03F; 
-                padding:15px; border-radius:12px; text-align:center;">
-        <strong>今日金句</strong><br>
-        {verse}
-    </div>
-    """, unsafe_allow_html=True)
+## 🚀 快速部署（Streamlit Cloud）
 
-    st.divider()
+1. Fork 本專案至你的 GitHub
+2. 前往 [Streamlit Cloud](https://share.streamlit.io) 建立新 App
+3. 連結你的 GitHub 倉庫
+4. 確保專案根目錄包含以下檔案：
+   - `app.py`
+   - `requirements.txt`
+   - `packages.txt`
+   - `.streamlit/config.toml`（可選）
+5. 部署完成後即可使用
 
-    menu = st.radio(
-        "功能選單",
-        [
-            "🏠 儀表板",
-            "👥 學生名冊",
-            "📅 排班生成",
-            "🤖 AI 匯入",
-            "🔄 智慧替補",
-            "📤 下載中心",
-            "💾 系統備份"
-        ],
-        label_visibility="collapsed"
-    )
+---
 
-    st.divider()
-    st.caption("由 Head Study Prefect 26-27 LI Chuangjie Jacky 製作")
+## 📁 檔案結構
+study-prefect-duty-roster-generator/
+├── app.py                    # 主程式入口
+├── config.py                 # 常數、顏色、每日金句、校規設定
+├── data.py                   # 示範資料、初始化
+├── ai_parser.py              # Gemini AI 智能匯入與備註解析
+├── core.py                   # 排班核心演算法、公平性審計
+├── utils.py                  # PDF 生成、備份還原、多格式匯出
+├── ui_components.py          # 所有 UI 元件（彩色表格、滑桿、替補面板）
+├── requirements.txt
+├── packages.txt              # WeasyPrint 系統依賴
+├── .streamlit/config.toml    # Streamlit Cloud 設定
+└── README.md
+text---
 
-# ====================== 主頁面 ======================
-st.title(f"🛡️ {APP_TITLE}")
-st.markdown("### 聖言中學導學風紀當值排班平台")
+## 📧 聯絡方式
 
-if menu == "🏠 儀表板":
-    st.success("✅ 系統運作正常 | 目前共有 " + str(len(st.session_state.students_df)) + " 位風紀")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("總學生數", len(st.session_state.students_df))
-    with col2:
-        st.metric("目前全局倍率", f"{st.session_state.global_load_multiplier}×")
-    with col3:
-        if "roster_df" in st.session_state and not st.session_state.roster_df.empty:
-            st.metric("已生成排班", "✅ 完整")
-        else:
-            st.metric("已生成排班", "❌ 尚未")
+有任何問題、客製化需求或 Bug 回報，請聯絡：  
+**s10777@syss.edu.hk**  
+（Head Study Prefect 26-27 LI Chuangjie Jacky）
 
-    if "roster_df" in st.session_state and not st.session_state.roster_df.empty:
-        st.subheader("最新排班表預覽")
-        display_colored_roster(st.session_state.roster_df)
+---
 
-elif menu == "👥 學生名冊":
-    st.session_state.students_df = student_management_panel(st.session_state.students_df)
-
-elif menu == "📅 排班生成":
-    st.subheader("🎯 手動生成排班")
-    multiplier = global_multiplier_slider()
-    st.session_state.global_load_multiplier = multiplier
-
-    if st.button("🚀 立即生成最新排班表", type="primary", use_container_width=True):
-        with st.spinner("正在使用公平演算法生成排班..."):
-            roster, report = generate_roster(st.session_state.students_df, multiplier)
-            st.session_state.roster_df = roster
-            st.session_state.audit_report = report
-        st.success("✅ 排班表生成完成！")
-        st.rerun()
-
-    if "roster_df" in st.session_state and not st.session_state.roster_df.empty:
-        display_colored_roster(st.session_state.roster_df)
-
-elif menu == "🤖 AI 匯入":
-    st.subheader("🤖 AI 輔助匯入（Excel / 照片）")
-    uploaded_file = st.file_uploader("上傳傳統 Excel 值班表 或 AI 解析後的 JSON", type=["xlsx", "xls", "csv", "json"])
-    
-    if uploaded_file:
-        if uploaded_file.name.endswith('.json'):
-            backup = json.loads(uploaded_file.getvalue().decode())
-            if import_system_backup(backup):
-                st.success("✅ 完整系統備份還原成功！")
-                st.rerun()
-        else:
-            df = process_roster_import(uploaded_file)
-            if df is not None:
-                st.session_state.students_df = df
-                st.success("✅ 已成功匯入學生資料")
-
-elif menu == "🔄 智慧替補":
-    if "roster_df" in st.session_state and not st.session_state.roster_df.empty:
-        substitute_recommendation_panel(st.session_state.roster_df, st.session_state.students_df)
-    else:
-        st.info("請先在「排班生成」頁面產生排班表")
-
-elif menu == "📤 下載中心":
-    if "roster_df" in st.session_state and not st.session_state.roster_df.empty:
-        report = st.session_state.get("audit_report", pd.DataFrame())
-        download_section(st.session_state.roster_df, report, st.session_state.global_load_multiplier)
-    else:
-        st.warning("尚未生成排班表，無法下載")
-
-elif menu == "💾 系統備份":
-    st.subheader("💾 完整系統備份 / 還原")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("📤 匯出目前完整備份", use_container_width=True):
-            backup = export_system_backup()
-            st.download_button(
-                label="下載 JSON 備份",
-                data=json.dumps(backup, ensure_ascii=False, indent=2),
-                file_name=f"SYSS_備份_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.json",
-                mime="application/json"
-            )
-    
-    with col2:
-        uploaded_backup = st.file_uploader("📥 上傳備份檔案還原", type=["json"])
-        if uploaded_backup:
-            backup_data = json.loads(uploaded_backup.getvalue().decode())
-            if import_system_backup(backup_data):
-                st.success("✅ 系統已成功還原！")
-                st.rerun()
-
-st.caption(f"© 2026 聖言中學導學風紀 | v{VERSION} | 由 Jacky Li 開發")
+**Made with ❤️ for Sing Yin Secondary School Study Prefect Team**
