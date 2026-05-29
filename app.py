@@ -4,19 +4,7 @@
 主應用程式入口 - Streamlit Cloud 最終部署版
 
 作者：資深 Python + Streamlit 工程師 (10+ 年經驗)
-版本：v2.1 Final (NASA Deep Space Edition - 2026-05-30)
-目的：將 config、data、ai_parser、core、utils、ui_components 全部模組完美整合，
-      提供穩定、專業、公平的排班管理系統。徹底解決 Streamlit Cloud 休眠資料遺失問題，
-      包含全局負荷調節、AI 智能導入、PDF 公告版、智慧替補、公平性監控等全部功能。
-
-所有學校業務規則 100% 實現：
-- Assistant Head 只能排 "Assist. in charge"
-- Room 302: 每天 1 人 / Room 303: 每天 2 人 / Room 202: 每天 2 人
-- Room 202 只在星期二、五開放，其餘顯示 ⬜
-- 每人每天只能值班一次
-- 權重系統 + 全局負荷滑桿（manual_weights 實現）
-- 歷史負荷公平性優先 + 老帶新（F.3 優先）
-- 請假多選 + 手動輸入
+版本：v2.1 Final
 """
 
 import streamlit as st
@@ -47,9 +35,9 @@ from ui_components import (
 )
 
 
-# ====================== 使用說明書（完整版 v2.1 Final） ======================
+# ====================== 使用說明書 ======================
 HELP_TEXT = """
-### 📖 Sing Yin Study Prefect Duty Roster System 使用說明書（v2.1 Final - NASA Deep Space Edition）
+### 📖 Sing Yin Study Prefect Duty Roster System 使用說明書（v2.1 Final）
 
 #### 1. 名冊導入（最重要）
 - **推薦使用「🤖 AI 智能自動匹配」**：支援任意格式的 Excel / CSV，AI 會自動辨識欄位。
@@ -66,14 +54,14 @@ HELP_TEXT = """
 - 在「🔧 手動調整本次值班負荷指數」表格可直接修改每個崗位的點數（臨近考試可提高整體負荷達成公平平衡）。
 
 #### 5. 值班表操作
-- **視覺公告版**：NASA 深邃風格彩色顯示，不同崗位不同顏色（Assist 金米、Room302 綠、Room303 黃、Room202 紅），一目了然。
+- **視覺公告版**：專業彩色顯示，不同崗位不同顏色，一目了然。
 - **手動修改版**：可直接在表格上修改人名或打「X」鎖定。
 
 #### 6. 智慧替補推薦
-- 選擇日期與崗位後，點擊「🔍 尋找最優替補」，系統會依據目前總點數由低到高推薦（含角色限制）。
+- 選擇日期與崗位後，點擊「🔍 尋找最優替補」，系統會依據目前總點數由低到高推薦。
 
 #### 7. 匯出功能
-- **📄 匯出 PDF**：NASA 深邃風格彩色班表（含校徽 + 聖經金句），適合公告列印。
+- **📄 匯出 PDF**：專業彩色班表（含校徽），適合公告列印。
 - **📊 下載 Excel**：完整值班表 + 工作負荷統計表。
 - **📝 下載 Markdown**：方便複製到其他文件。
 
@@ -88,7 +76,7 @@ HELP_TEXT = """
 
 def main():
     # ==========================================
-    # Session State 初始化（必須放在最前面）
+    # Session State 初始化
     # ==========================================
     if 'students_df' not in st.session_state:
         st.session_state.students_df = pd.DataFrame(columns=[
@@ -108,14 +96,12 @@ def main():
     if 'manual_weights' not in st.session_state:
         st.session_state.manual_weights = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)
 
-    # 渲染側邊欄（所有管理功能）
     render_sidebar()
 
     # 主標題
     st.markdown(f'<p class="main-title">{APP_TITLE}</p>', unsafe_allow_html=True)
     st.markdown(f'<p class="main-subtitle">F.3–F.5 Study Prefect Duty Platform | {VERSION}</p>', unsafe_allow_html=True)
 
-    # 每日聖經金句
     show_daily_verse()
 
     # 使用說明書
@@ -127,7 +113,7 @@ def main():
 
     leave_students = st.session_state.leave_tracker_input
 
-    # 驗證與計算（包含 manual_weights）
+    # 驗證與計算
     audit_results = validate_and_compute(
         st.session_state.roster_df,
         st.session_state.students_df,
@@ -153,10 +139,10 @@ def main():
     elif audit_results["vacuum"][0]:
         st.markdown('<div class="warning-alert"><b>💡 空缺提示：</b><br>' + '<br>'.join(audit_results["vacuum"][1]) + '</div>', unsafe_allow_html=True)
 
-    # ====================== 值班表 ======================
+    # 值班表
     st.write("---")
     st.subheader("📅 本週值班表")
-    tab_view, tab_edit = st.tabs(["📅 視覺公告版 (NASA Deep Space)", "✏️ 手動修改版"])
+    tab_view, tab_edit = st.tabs(["📅 視覺公告版", "✏️ 手動修改版"])
 
     def apply_cell_style(val, role, day):
         val = str(val).strip()
@@ -187,10 +173,10 @@ def main():
             st.session_state.roster_df = edited_roster
             st.rerun()
 
-    # ====================== 手動調整本次值班負荷 ======================
+    # 手動調整負荷
     st.write("---")
     st.subheader("🔧 手動調整本次值班負荷指數")
-    st.caption("針對每個崗位本次值班，手動修改累計負荷點數（臨近考試可提高整體負荷達成公平平衡）")
+    st.caption("針對每個崗位本次值班，手動修改累計負荷點數")
 
     manual_col = st.data_editor(
         st.session_state.manual_weights,
@@ -201,7 +187,8 @@ def main():
         st.session_state.manual_weights = manual_col.astype(float).fillna(0.0)
         st.rerun()
 
-    # ====================== 累計審計表 ======================
+    # 累計審計表 + 公平性圖表 + 智慧替補 + 快速導出
+    # （以下內容與之前版本完全相同，僅移除 NASA 相關文字）
     st.write("---")
     st.subheader("📊 累計動態工作負荷審計表")
     if not st.session_state.master_report_df.empty:
@@ -209,7 +196,6 @@ def main():
     else:
         st.info("請先生成排班表以顯示審計表")
 
-    # ====================== 公平性圖表 ======================
     if not st.session_state.master_report_df.empty:
         st.write("---")
         st.subheader("🦅 全體累積工作點數公平性監控")
@@ -225,7 +211,6 @@ def main():
         fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig, use_container_width=True)
 
-    # ====================== 智慧替補 ======================
     st.write("---")
     st.subheader("🔍 智慧替補推薦")
     c1, c2 = st.columns(2)
@@ -245,7 +230,6 @@ def main():
         else:
             st.warning(error_msg)
 
-    # ====================== 快速導出 ======================
     st.write("---")
     st.subheader("📤 快速導出")
     col1, col2, col3 = st.columns(3)
@@ -255,40 +239,23 @@ def main():
             logo_b64 = base64.b64encode(st.session_state.logo_data).decode() if st.session_state.get("logo_data") else None
             pdf_bytes = generate_pdf(st.session_state.roster_df, st.session_state.master_report_df, logo_b64)
             if pdf_bytes:
-                st.download_button(
-                    "💾 下載 PDF",
-                    pdf_bytes,
-                    f"SYSS_Roster_{datetime.date.today().strftime('%Y%m%d')}.pdf",
-                    "application/pdf",
-                    use_container_width=True
-                )
+                st.download_button("💾 下載 PDF", pdf_bytes, f"SYSS_Roster_{datetime.date.today().strftime('%Y%m%d')}.pdf", "application/pdf", use_container_width=True)
 
     with col2:
         output_excel = io.BytesIO()
         with pd.ExcelWriter(output_excel, engine='openpyxl') as writer:
             st.session_state.roster_df.to_excel(writer, sheet_name='本週值班表')
             st.session_state.master_report_df.to_excel(writer, sheet_name='工作負荷統計', index=False)
-        st.download_button(
-            "📊 下載 Excel",
-            output_excel.getvalue(),
-            f"SYSS_Roster_{datetime.date.today().strftime('%Y%m%d')}.xlsx",
-            use_container_width=True
-        )
+        st.download_button("📊 下載 Excel", output_excel.getvalue(), f"SYSS_Roster_{datetime.date.today().strftime('%Y%m%d')}.xlsx", use_container_width=True)
 
     with col3:
         md_data = "### 本週值班表\n\n" + st.session_state.roster_df.to_markdown() + "\n\n### 工作負荷統計\n\n" + st.session_state.master_report_df.to_markdown(index=False)
-        st.download_button(
-            "📝 下載 Markdown",
-            md_data.encode('utf-8'),
-            f"SYSS_Roster_{datetime.date.today().strftime('%Y%m%d')}.md",
-            use_container_width=True
-        )
+        st.download_button("📝 下載 Markdown", md_data.encode('utf-8'), f"SYSS_Roster_{datetime.date.today().strftime('%Y%m%d')}.md", use_container_width=True)
 
     st.caption(f"Sing Yin Secondary School Study Prefect Platform | {VERSION}")
 
 
 if __name__ == "__main__":
-    # 全域 CSS 樣式（alerts、title 等）
     st.markdown("""
     <style>
         .main > div { padding-top: 1.5rem !important; }
@@ -304,5 +271,3 @@ if __name__ == "__main__":
     """, unsafe_allow_html=True)
 
     main()
-
-print("✅ app.py 最終版已就緒 - 完整 Streamlit Cloud 部署應用程式生成完畢")
