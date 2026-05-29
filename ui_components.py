@@ -5,8 +5,6 @@ UI 元件模組 - 側邊欄、每日聖經金句、控制按鈕等前端組件
 
 作者：Head Study Prefect 26-27 LI Chuangjie Jacky
 版本：v2.1 Final
-目的：提供完整的 render_sidebar()、show_daily_verse()、render_control_buttons()
-      完美整合專業彩色風格、每日聖經金句、AI 解析、Cloud 備份等功能。
 """
 
 import streamlit as st
@@ -39,7 +37,7 @@ for day_list in DAILY_VERSES.values():
 
 
 def show_daily_verse():
-    """顯示每日聖經金句 + 刷新按鈕（使用 DAILY_VERSES.docx 完整版）"""
+    """顯示每日聖經金句 + 刷新按鈕"""
     if "current_verse" not in st.session_state or st.session_state.current_verse is None:
         st.session_state.current_verse = random.choice(ALL_VERSES)
 
@@ -61,7 +59,6 @@ def render_sidebar():
     with st.sidebar:
         st.header("🏫 Sing Yin Secondary School")
 
-        # Logo 顯示開關 + 上傳
         show_logo = st.checkbox("🖼️ 顯示校徽（畫面與 PDF）", value=True, key="show_logo_toggle")
 
         uploaded_logo = st.file_uploader("上傳自訂校徽 (PNG)", type=["png"], key="logo_uploader")
@@ -208,13 +205,5 @@ def render_control_buttons():
 
     return selected_closures
 
-
-# ====================== 模組自我驗證 ======================
-def validate_ui_components() -> None:
-    print("✅ ui_components.py 驗證通過 - 側邊欄、每日金句、控制按鈕全部就緒")
-
-
-if __name__ != "__main__":
-    validate_ui_components()
 
 print("✅ ui_components.py 已載入完成 - 完整前端 UI 組件全部就緒")
