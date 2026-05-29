@@ -2,9 +2,6 @@
 """
 聖言中學導學風紀當值排班平台 (Sing Yin Secondary School Study Prefect Duty Roster Platform)
 主應用程式入口 - Streamlit Cloud 最終部署版
-
-作者：資深 Python + Streamlit 工程師 (10+ 年經驗)
-版本：v2.1 Final
 """
 
 import streamlit as st
@@ -76,7 +73,7 @@ HELP_TEXT = """
 
 def main():
     # ==========================================
-    # Session State 初始化
+    # Session State 初始化（必須放在最前面）
     # ==========================================
     if 'students_df' not in st.session_state:
         st.session_state.students_df = pd.DataFrame(columns=[
@@ -179,14 +176,14 @@ def main():
     st.subheader("🔧 手動調整本次值班負荷指數")
     st.caption("可同時使用全局滑桿快速調整整體負荷，或下方表格針對個別崗位精細微調")
 
-    # 新增：全局負荷調節滑桿（更直觀）
+    # 全局負荷滑桿（更直觀）
     col_slider, col_info = st.columns([3, 1])
     with col_slider:
         global_multiplier = st.slider(
             "全域負荷倍率（影響本次所有值班點數）",
             min_value=0.8,
             max_value=2.0,
-            value=1.0,
+            value=st.session_state.global_load_multiplier,
             step=0.05,
             format="%.2f",
             key="global_load_multiplier"
@@ -194,7 +191,7 @@ def main():
     with col_info:
         st.metric("目前全域倍率", f"{global_multiplier:.2f}×", help="臨近考試時可調高，讓累計點數較低的同學更快達到平衡")
 
-    # 保留原本的個別崗位微調表格
+    # 個別崗位精細調整表格（保留原功能）
     st.caption("個別崗位精細調整（可覆蓋全局倍率）")
     manual_col = st.data_editor(
         st.session_state.manual_weights,
@@ -204,9 +201,6 @@ def main():
     if not manual_col.equals(st.session_state.manual_weights):
         st.session_state.manual_weights = manual_col.astype(float).fillna(0.0)
         st.rerun()
-
-    # 儲存全局倍率
-    st.session_state.global_load_multiplier = global_multiplier
 
     # 累計審計表
     st.write("---")
