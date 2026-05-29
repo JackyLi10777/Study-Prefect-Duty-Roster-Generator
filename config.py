@@ -50,7 +50,13 @@ NASA_COLORS = {
 
 # ====================== 核心輔助函數 ======================
 def get_role_style(role: str, day: str = "") -> dict:
-    color_key = next((k for k in ROOMS_CONFIG if k in role), "empty")
+    for key, cfg in ROOMS_CONFIG.items():
+        if key in role or cfg["display_name"] in role:
+            color_key = cfg["color"]
+            break
+    else:
+        color_key = "empty"
+
     style = {"bg": NASA_COLORS["empty_bg"], "text": NASA_COLORS["text_dark"], "border": "1px solid #BDC3C7"}
     if color_key == "assist":
         style.update({"bg": NASA_COLORS["assist_bg"], "border": f"3px solid {NASA_COLORS['assist_border']}", "text": NASA_COLORS["assist_text"]})
@@ -80,10 +86,19 @@ def is_room_open_on_weekday(room: str, day: str) -> bool:
             return day in cfg["available_weekdays"]
     return True
 
-# ====================== 每日聖經金句（完整版） ======================
+def get_daily_slots(role: str) -> int:
+    for key, cfg in ROOMS_CONFIG.items():
+        if key in role:
+            return cfg["daily_slots"]
+    return 1
+
+# ====================== 每日聖經金句（完整 dict） ======================
 DAILY_VERSES = {
-    0: ["「你要專心仰賴耶和華，不可倚靠自己的聰明。」——箴言 3:5", ...],  # 請保留您原本完整的 DAILY_VERSES 字典
-    # （若您沒有完整字典，請告訴我，我會立刻補上）
+    0: ["「你要專心仰賴耶和華，不可倚靠自己的聰明。」——箴言 3:5", "「凡事都要憑著愛心而行。」——哥林多前書 16:14"],
+    1: ["「我靠著那加給我力量的，凡事都能做。」——腓立比書 4:13", "「你們要彼此相愛，像我愛你們一樣。」——約翰福音 13:34"],
+    2: ["「謙卑的人必得尊榮。」——箴言 29:23", "「凡事都要憑著愛心而行。」——哥林多前書 16:14"],
+    3: ["「你要盡心、盡性、盡意愛主你的神。」——馬太福音 22:37", "「你們要彼此相愛，像我愛你們一樣。」——約翰福音 13:34"],
+    4: ["「凡事都要憑著愛心而行。」——哥林多前書 16:14", "「我靠著那加給我力量的，凡事都能做。」——腓立比書 4:13"]
 }
 
 GEMINI_MODEL = "gemini-3.5-flash"
