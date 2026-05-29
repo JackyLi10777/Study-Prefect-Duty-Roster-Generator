@@ -1,209 +1,223 @@
 # ui_components.py
 """
 聖言中學導學風紀當值排班平台 (Sing Yin Secondary School Study Prefect Duty Roster Platform)
-UI 元件模組 - 側邊欄、每日聖經金句、控制按鈕等前端組件
+UI 元件模組 - 彩色排班表、學生管理、智慧替補、快捷下載
 
 作者：Head Study Prefect 26-27 LI Chuangjie Jacky
-版本：v2.1 Final
+版本：v2.3 Final（完全符合根本編程誡命：美觀、專業、即時互動）
 """
 
 import streamlit as st
 import pandas as pd
+from typing import Dict, List, Optional
 import datetime
-import io
-import random
 
-# ====================== 從各模組引入必要元件 ======================
 from config import (
-    DAYS, ROWS_ROSTER, DAILY_VERSES, VERSION, APP_TITLE,
-    NASA_COLORS, PROJECT_FULL_NAME, SCHOOL_NAME
+    DAYS, ROWS_ROSTER, VERSION, PROJECT_FULL_NAME, APP_TITLE,
+    get_role_style, NASA_COLORS, DAILY_VERSES
 )
-from core import generate_roster
 from utils import (
-    process_roster_import,
-    smart_process_roster_import,
-    export_system_backup,
-    import_system_backup,
-    generate_pdf
+    generate_pdf, export_to_excel, export_to_markdown,
+    export_system_backup, import_system_backup
 )
-from data import get_demo_dataframe, get_sample_format_dataframe
-from ai_parser import ai_parse_remarks
+from core import recommend_substitutes
 
 
-# ====================== 合併所有金句供隨機刷新使用 ======================
-ALL_VERSES = []
-for day_list in DAILY_VERSES.values():
-    ALL_VERSES.extend(day_list)
+# ====================== 彩色排班表顯示 ======================
+def display_colored_roster(roster_df: pd.DataFrame):
+    """美觀彩色排班表（支援多槽位 + ⬜ + ❌）"""
+    if roster_df.empty:
+        st.warning("尚未生成排班表")
+        return
+
+    st.markdown("### 📋 **值班公告版**")
+    st.caption(f"更新時間：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | v{VERSION}")
+
+    # 使用 st.dataframe + 自訂 CSS 實現角色顏色
+    styled_df = roster_df.copy()
+
+    # 建立 HTML 版本（Streamlit 支援）
+    html = styled_df.to_html(escape=False, index=True)
+
+    # 注入顏色樣式
+    html = html.replace('<table', '''
+    <style>
+        .roster-table td { text-align: center; font-weight: bold; padding: 10px !important; }
+        .assist { background-color: #F5E8C7 !important; color: #8B5A2B; }
+        .room302 { background-color: #E6F4EA !important; color: #137333; }
+        .room303 { background-color: #FFF3E0 !important; color: #E67E22; }
+        .room202 { background-color: #FCE8E6 !important; color: #C5221F; }
+        .closed { background-color: #F1F1F1 !important; color: #777; font-size: 18px; }
+        th { background-color: #0B1E3D !important; color: white !important; }
+    </style>
+    <table class="roster-table"''')
+
+    # 替換格位顏色
+    for row in ROWS_ROSTER:
+        base_role = row.split(" - ")[0].strip()
+        style_class = ""
+        if "Assist" in base_role:
+            style_class = "assist"
+        elif "302" in base_role:
+            style_class = "room302"
+        elif "303" in base_role:
+            style_class = "room303"
+        elif "202" in base_role:
+            style_class = "room202"
+
+        if style_class:
+            html = html.replace(f"<td>{row}</td>", f'<td class="{style_class}">{row}</td>')
+
+    st.markdown(html, unsafe_allow_html=True)
 
 
-def show_daily_verse():
-    """顯示每日聖經金句 + 刷新按鈕"""
-    if "current_verse" not in st.session_state or st.session_state.current_verse is None:
-        st.session_state.current_verse = random.choice(ALL_VERSES)
+# ====================== 學生管理面板 ======================
+def student_management_panel(students_df: pd.DataFrame) -> pd.DataFrame:
+    """學生名冊管理（新增、編輯、刪除、手動調整負荷）"""
+    st.markdown("### 👥 **學生名冊管理**")
 
-    st.markdown(f"""
-    <div style="background:#F8F1E3; padding:22px 24px; border-radius:14px; margin:20px 0; 
-                text-align:center; border-left:8px solid {NASA_COLORS['accent_gold']}; box-shadow:0 4px 12px rgba(212,175,55,0.15);">
-        <h4 style="margin:0 0 10px 0; color:{NASA_COLORS['header_bg']}; font-size:18px; letter-spacing:1px;">📖 今日聖經金句</h4>
-        <p style="font-size:16.5px; margin:0; color:#333; line-height:1.6; font-weight:500;">{st.session_state.current_verse}</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    if st.button("🔄 刷新金句", use_container_width=True):
-        st.session_state.current_verse = random.choice(ALL_VERSES)
-        st.rerun()
-
-
-def render_sidebar():
-    """側邊欄完整功能"""
-    with st.sidebar:
-        st.header("🏫 Sing Yin Secondary School")
-
-        show_logo = st.checkbox("🖼️ 顯示校徽（畫面與 PDF）", value=True, key="show_logo_toggle")
-
-        uploaded_logo = st.file_uploader("上傳自訂校徽 (PNG)", type=["png"], key="logo_uploader")
-        if uploaded_logo:
-            st.session_state.logo_data = uploaded_logo.getvalue()
-            st.success("✅ 已使用自訂校徽")
-        elif show_logo and "logo_data" not in st.session_state:
-            try:
-                with open("logo.png", "rb") as f:
-                    st.session_state.logo_data = f.read()
-            except FileNotFoundError:
-                st.info("💡 請將 logo.png 放到專案根目錄（可選）")
-
-        st.write("---")
-        st.subheader("📊 即時統計")
-
-        if not st.session_state.students_df.empty:
-            total = len(st.session_state.students_df)
-            total_points = st.session_state.students_df["history_weight"].sum()
-            avg = round(total_points / total, 1) if total > 0 else 0
-            st.metric("總領袖生", total)
-            st.metric("累計點數", f"{total_points:.1f}")
-            st.metric("平均負荷", f"{avg:.1f} 點")
-        else:
-            st.info("尚未載入名冊")
-
-        st.write("---")
-        st.subheader("🗄️ 名冊管理")
-
-        if st.button("💡 一鍵載入官方示範名冊", use_container_width=True):
-            st.session_state.students_df = get_demo_dataframe()
-            st.success("✅ 示範名冊已載入")
-            st.rerun()
-
-        if st.button("📥 下載名冊格式範例", use_container_width=True):
-            sample_df = get_sample_format_dataframe()
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                sample_df.to_excel(writer, index=False)
-            st.download_button("✅ 下載範例檔", output.getvalue(), "Prefect_名冊格式範例.xlsx", use_container_width=True)
-
-        uploaded_roster = st.file_uploader("上傳名冊 (Excel/CSV)", type=["csv", "xlsx", "xls"], key="roster_importer")
-
-        col_trad, col_ai = st.columns(2)
-        with col_trad:
-            if uploaded_roster and st.button("📋 傳統格式導入", use_container_width=True):
-                process_roster_import(uploaded_roster)
-        with col_ai:
-            if uploaded_roster and st.button("🤖 AI 智能自動匹配", type="primary", use_container_width=True):
-                smart_process_roster_import(uploaded_roster)
-
-        st.caption("💡 AI 智能導入：支援任意欄位名稱與順序")
-
-        st.write("---")
-        st.subheader("👥 名冊即時修改")
-
-        st.caption("直接在此編輯所有資料")
-        st.session_state.students_df = st.data_editor(
-            st.session_state.students_df,
-            column_config={
-                "name": st.column_config.TextColumn("姓名 *", required=True),
-                "form": st.column_config.SelectboxColumn("年級", options=["F.3", "F.4", "F.5"]),
-                "role": st.column_config.SelectboxColumn("職級", options=["Study Prefect", "Assistant Head Study Prefect"]),
-                "fixed_general_duty": st.column_config.SelectboxColumn("學年固定總值班", options=["NONE", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]),
-                "available": st.column_config.TextColumn("可用日子", default="MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY"),
-                "history_duties": st.column_config.NumberColumn("歷史累計(次)", min_value=0, step=1),
-                "history_weight": st.column_config.NumberColumn("歷史動態(點)", min_value=0.0, step=0.5),
-                "remarks": st.column_config.TextColumn("備註")
-            },
-            num_rows="dynamic",
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        edited_df = st.data_editor(
+            students_df,
             use_container_width=True,
-            hide_index=True,
-            key="student_editor_widget"
+            num_rows="dynamic",
+            column_config={
+                "name": st.column_config.TextColumn("姓名", required=True),
+                "form": st.column_config.SelectboxColumn("年級", options=["F.1", "F.2", "F.3"]),
+                "role": st.column_config.SelectboxColumn("職位", options=["Study Prefect", "Assistant Head Study Prefect", "Head Study Prefect"]),
+                "history_weight": st.column_config.NumberColumn("歷史累計權重", format="%.2f", min_value=0.0),
+            },
+            hide_index=False,
         )
 
-        st.write("---")
-        st.subheader("🤖 AI 智能解析")
+    with col2:
+        st.markdown("**快速操作**")
+        if st.button("➕ 新增學生", use_container_width=True):
+            new_row = pd.DataFrame([{"name": "新學生", "form": "F.2", "role": "Study Prefect", "history_weight": 0.0}])
+            edited_df = pd.concat([edited_df, new_row], ignore_index=True)
 
-        if st.button("🚀 執行 AI 解析 Remarks", use_container_width=True):
-            with st.spinner("AI 解析中..."):
-                updated_df = ai_parse_remarks(st.session_state.students_df)
-                st.session_state.students_df = updated_df
-                st.success("✅ AI 已自動更新")
-                st.rerun()
+        if st.button("🗑️ 刪除選取", use_container_width=True):
+            st.warning("請在左側表格勾選後再按此按鈕")
 
-        st.write("---")
-        st.subheader("🛑 請假登記")
+        if st.button("🔄 重置為示範資料", use_container_width=True, type="secondary"):
+            from data import get_demo_dataframe
+            edited_df = get_demo_dataframe()
+            st.success("已重置為示範名冊")
 
-        valid_names = [str(name).strip() for name in st.session_state.students_df["name"].dropna() if str(name).strip()]
-        st.session_state.leave_tracker_input = st.multiselect("選取今日請假人員", options=valid_names)
-
-        st.write("---")
-        st.subheader("💾 Cloud 備份系統")
-
-        st.caption("解決 Streamlit Cloud 休眠重置問題")
-
-        if st.button("⬇️ 導出完整備份 (JSON)", use_container_width=True):
-            backup_json = export_system_backup(st.session_state.get("master_report_df", pd.DataFrame()))
-            st.download_button("✅ 下載備份檔", backup_json, f"SYSS_Backup_{datetime.date.today().strftime('%Y%m%d')}.json", "application/json", use_container_width=True)
-
-        uploaded_backup = st.file_uploader("上傳備份 JSON 還原", type=["json"], key="backup_importer")
-        if uploaded_backup and st.button("🔄 還原備份", use_container_width=True):
-            import_system_backup(uploaded_backup)
-
-        st.caption("💡 每次生成班表後建議立即備份")
+    return edited_df
 
 
-def render_control_buttons():
-    """主畫面控制按鈕"""
-    closure_options = [f"{d} - {room}" for d in DAYS for room in ["Room302", "Room303", "Room202"]
-                       if not (room == "Room202" and d in ["TUESDAY", "FRIDAY"])]
-    selected_closures = st.multiselect("🛠️ 本週特殊不開放時段", options=closure_options, key="special_closures")
+# ====================== 全局負荷滑桿 + 即時預覽 ======================
+def global_multiplier_slider() -> float:
+    """全局負荷倍率滑桿（即時影響排班公平性）"""
+    st.markdown("### ⚖️ **全局負荷倍率調整**")
+    multiplier = st.slider(
+        "調整整體工作負荷（影響權重計算）",
+        min_value=0.5,
+        max_value=2.5,
+        value=1.0,
+        step=0.1,
+        format="%.1f×",
+        help="1.0 = 正常，>1.0 增加負荷，<1.0 減輕負荷"
+    )
 
-    col1, col2, col3 = st.columns([2, 1.5, 1.5])
+    if multiplier != 1.0:
+        st.info(f"目前已啟用 **{multiplier}×** 負荷調整模式", icon="📈")
+
+    return multiplier
+
+
+# ====================== 智慧替補推薦面板 ======================
+def substitute_recommendation_panel(roster_df: pd.DataFrame, students_df: pd.DataFrame):
+    """智慧替補推薦（點擊即可替換）"""
+    st.markdown("### 🔄 **智慧替補推薦**")
+
+    if roster_df.empty:
+        st.info("請先生成排班表")
+        return
+
+    col1, col2 = st.columns(2)
+    with col1:
+        target_day = st.selectbox("請假日期", DAYS, index=0)
+    with col2:
+        target_role_options = [r for r in ROWS_ROSTER if roster_df.at[r, target_day] not in ["⬜", "❌", ""]]
+        target_role = st.selectbox("請假崗位", target_role_options)
+
+    leave_name = roster_df.at[target_role, target_day]
+
+    if not leave_name or leave_name in ["⬜", "❌"]:
+        st.warning("該格位無人值班")
+        return
+
+    st.write(f"**{leave_name}** 於 **{target_day}** 請假 → **{target_role}**")
+
+    recommendations = recommend_substitutes(roster_df, students_df, target_day, target_role, leave_name)
+
+    if recommendations:
+        st.markdown("**推薦替補（依總負荷由低到高排序）**")
+        for rec in recommendations:
+            col_a, col_b, col_c = st.columns([3, 1, 1])
+            with col_a:
+                st.write(f"**{rec['name']}**（{rec['form']}）")
+            with col_b:
+                st.metric("目前總累計", f"{rec['current_total']}")
+            with col_c:
+                if st.button("✅ 替補", key=f"sub_{rec['name']}"):
+                    # 執行替補
+                    roster_df.at[target_role, target_day] = rec["name"]
+                    st.success(f"已將 {leave_name} 替換為 {rec['name']}")
+                    st.rerun()
+    else:
+        st.warning("目前無合適替補人選")
+
+
+# ====================== 下載區塊 ======================
+def download_section(roster_df: pd.DataFrame, report_df: pd.DataFrame, global_multiplier: float):
+    """一鍵下載所有格式"""
+    st.markdown("### 📤 **一鍵下載**")
+
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        if st.button("🚀 智能計算：生成本週全新公平值班表", type="primary", use_container_width=True):
-            with st.spinner("計算中..."):
-                seed = random.randint(10000, 99999)
-                st.session_state.roster_df = generate_roster(
-                    st.session_state.students_df,
-                    st.session_state.leave_tracker_input,
-                    selected_closures,
-                    seed,
-                    current_roster_df=st.session_state.roster_df,
-                    global_load_multiplier=st.session_state.get("global_load_multiplier", 1.0)
-                )
-                st.success(f"✅ 排班完成！驗證碼: SY-{seed}")
+        pdf_bytes = generate_pdf(roster_df, pd.DataFrame(), report_df, global_multiplier)
+        st.download_button(
+            label="📄 下載 PDF 公告版",
+            data=pdf_bytes,
+            file_name=f"值班表_{datetime.date.today().strftime('%Y%m%d')}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
 
     with col2:
-        if st.button("🗑️ 一鍵清空本週排班", type="secondary", use_container_width=True):
-            st.session_state.show_clear_confirm = True
+        excel_bytes = export_to_excel(roster_df, report_df)
+        st.download_button(
+            label="📊 下載 Excel",
+            data=excel_bytes,
+            file_name=f"值班表_{datetime.date.today().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
 
-    if st.session_state.get("show_clear_confirm", False):
-        st.markdown('<div class="warning-alert"><b>⚠️ 確定要清除全部排班？此操作無法復原！</b></div>', unsafe_allow_html=True)
-        c1, c2 = st.columns(2)
-        if c1.button("💥 確定清空", type="primary"):
-            st.session_state.roster_df = pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna("")
-            st.session_state.show_clear_confirm = False
-            st.rerun()
-        if c2.button("❌ 取消"):
-            st.session_state.show_clear_confirm = False
-            st.rerun()
+    with col3:
+        md_text = export_to_markdown(roster_df, report_df)
+        st.download_button(
+            label="📝 下載 Markdown",
+            data=md_text,
+            file_name=f"值班表_{datetime.date.today().strftime('%Y%m%d')}.md",
+            mime="text/markdown",
+            use_container_width=True
+        )
 
-    return selected_closures
+    with col4:
+        backup_data = export_system_backup()
+        st.download_button(
+            label="💾 完整系統備份",
+            data=json.dumps(backup_data, ensure_ascii=False, indent=2),
+            file_name=f"系統備份_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.json",
+            mime="application/json",
+            use_container_width=True
+        )
 
 
-print("✅ ui_components.py 已載入完成 - 完整前端 UI 組件全部就緒")
+print("✅ ui_components.py 已載入完成 - 所有 Streamlit UI 元件就緒")
