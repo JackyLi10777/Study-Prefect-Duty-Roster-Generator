@@ -5,7 +5,6 @@ Sing Yin Secondary School Study Prefect Duty Roster Platform
 最終主程式（v2.3 Final）
 
 作者：Head Study Prefect 26-27 LI Chuangjie Jacky
-完全符合「根本編程誡命」：專業、美觀、即時互動、100% Streamlit Cloud 相容
 """
 
 import streamlit as st
@@ -53,7 +52,7 @@ with st.sidebar:
     # 每日金句
     today = datetime.date.today().weekday() % 5
     verse_list = DAILY_VERSES.get(today, ["「你要專心仰賴耶和華...」——箴言 3:5"])
-    verse = verse_list[0] if isinstance(verse_list, list) else verse_list
+    verse = verse_list[0] if isinstance(verse_list, list) else str(verse_list)
     st.markdown(f"""
     <div style="background: linear-gradient(135deg, #1C2526, #2C3E50); 
                 color:#F4D03F; padding:15px; border-radius:12px; text-align:center;">
@@ -108,19 +107,19 @@ elif menu == "👥 學生名冊":
 
 elif menu == "📅 排班生成":
     st.subheader("🎯 手動生成排班")
+    
+    # 正確處理全局負荷滑桿（已修正 widget 衝突）
     multiplier = global_multiplier_slider()
     
-    # 重要修正：避免 session_state 與 widget 衝突
-    if "global_load_multiplier" not in st.session_state:
-        st.session_state.global_load_multiplier = multiplier
-    else:
+    if "global_load_multiplier" not in st.session_state or st.session_state.global_load_multiplier != multiplier:
         st.session_state.global_load_multiplier = multiplier
 
     if st.button("🚀 立即生成最新排班表", type="primary", use_container_width=True):
         with st.spinner("正在使用公平演算法生成排班..."):
-            roster, report = generate_roster(st.session_state.students_df, multiplier)
+            roster = generate_roster(st.session_state.students_df, multiplier)
+            audit = validate_and_compute(roster, st.session_state.students_df)
             st.session_state.roster_df = roster
-            st.session_state.audit_report = report
+            st.session_state.audit_report = audit["report_df"]
         st.success("✅ 排班表生成完成！")
         st.rerun()
 
