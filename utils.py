@@ -1,10 +1,10 @@
 # utils.py
 """
 聖言中學導學風紀當值排班平台 (Sing Yin Secondary School Study Prefect Duty Roster Platform)
-工具模組 - PDF 生成、備份還原、名冊導入引擎、系統完整備份
+工具模組 - PDF 生成、系統備份/還原、名冊導入引擎
 
 作者：Head Study Prefect 26-27 LI Chuangjie Jacky
-版本：v2.3 Final（已整合多槽位 ROWS_ROSTER、全局負荷滑桿、WeasyPrint 強固防護、Streamlit Cloud 休眠解決方案）
+版本：v2.3 Final（完整支援全局負荷滑桿、多槽位排班、彩色 PDF、JSON 備份解決 Cloud 休眠問題）
 """
 
 import streamlit as st
@@ -15,43 +15,48 @@ import datetime
 import base64
 import random
 
+# ====================== PDF 支援強固檢查 ======================
 try:
     from weasyprint import HTML
     PDF_AVAILABLE = True
 except (ImportError, OSError, Exception) as e:
     PDF_AVAILABLE = False
-    st.warning("⚠️ WeasyPrint 未就緒（PDF 功能暫時無法使用）。請確認 packages.txt 已加入 weasyprint 並重新部署。")
+    st.warning("⚠️ WeasyPrint 未就緒（PDF 功能暫時無法使用）。請確認 GitHub 已加入 packages.txt 並重新部署。")
 
-# ====================== Gemini 配置（相容性保留） ======================
-import google.generativeai as genai
+# ====================== 模組導入 ======================
 from config import (
     DAYS, ROWS_ROSTER, NASA_COLORS, get_role_style,
-    GEMINI_MODEL, ROOMS_CONFIG
+    PROJECT_FULL_NAME, VERSION, GEMINI_MODEL
 )
+from data import get_demo_dataframe, get_sample_format_dataframe
 
+# ====================== Gemini 配置（AI 導入後備使用） ======================
 if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
-    try:
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    except Exception:
-        pass
-
+    import google.generativeai as genai
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    model = genai.GenerativeModel(GEMINI_MODEL)
+else:
+    model = None
 
 # ====================== PDF 專用顏色樣式函數 ======================
 def get_cell_style(val: str, role: str, day: str) -> str:
     """
-    為 PDF 表格生成 cell style（與 Web 版 get_role_style 完全一致）
+    為 PDF 表格生成 cell style（與 Web 版 get_role_style 邏輯完全一致）
+    支援多槽位角色（Room 303 -1 / -2、Room 202 -1 / -2）
     """
     val = str(val).strip()
 
     if val == "X":
         return f"color:{NASA_COLORS['x_text']}; font-weight:bold; background-color:{NASA_COLORS['x_bg']}; text-align:center; border:2px solid {NASA_COLORS['x_border']};"
 
+    # Room 202 常規不開放日顯示 ⬜
     if "Room202" in role and day in ["TUESDAY", "FRIDAY"]:
         return f"background-color:{NASA_COLORS['closed_bg']}; color:#546E7A; font-style:italic; text-align:center; border:1px solid #90A4AE;"
 
     if val == "":
         return f"background-color:{NASA_COLORS['empty_bg']}; text-align:center;"
 
+    # 使用 config.py 的 get_role_style 確保 Web 與 PDF 顏色 100% 一致
     style = get_role_style(role, day)
 
     return (
@@ -61,19 +66,16 @@ def get_cell_style(val: str, role: str, day: str) -> str:
         f"border:{style['border']};"
     )
 
-
 # ====================== 名冊導入引擎（傳統格式） ======================
 def process_roster_import(uploaded_file):
-    """
-    傳統 Excel / CSV 格式導入（後備方案）
-    """
+    """傳統格式 Excel/CSV 導入（後備方案）"""
     try:
-        if uploaded_file.name.endswith('.csv'):
+        if uploaded_file.name.lower().endswith('.csv'):
             df = pd.read_csv(uploaded_file)
         else:
             df = pd.read_excel(uploaded_file)
 
-        # 智能欄位映射
+        # 欄位智能映射
         mapping = {
             '姓名': 'name', 'name': 'name', 'Prefect Name': 'name', '學生姓名': 'name',
             '年級': 'form', 'form': 'form', 'Form': 'form',
@@ -102,26 +104,24 @@ def process_roster_import(uploaded_file):
                 else:
                     df[col] = ""
 
-        df = df[required_cols]
+        df = df[required_cols].copy()
         df["name"] = df["name"].astype(str).str.strip()
         df = df[(df["name"] != "") & (df["name"] != "nan")]
         df["history_duties"] = pd.to_numeric(df["history_duties"], errors='coerce').fillna(0).astype(int)
         df["history_weight"] = pd.to_numeric(df["history_weight"], errors='coerce').fillna(0.0)
 
-        st.session_state.students_df = df
-        st.sidebar.success(f"🎉 成功導入 {len(df)} 位領袖生名冊！")
+        st.session_state.students_df = df.reset_index(drop=True)
+        st.sidebar.success(f"🎉 傳統格式導入成功！共 {len(df)} 位領袖生")
         st.rerun()
     except Exception as e:
-        st.sidebar.error(f"❌ 傳統格式導入失敗: {str(e)}")
+        st.sidebar.error(f"❌ 傳統導入失敗: {str(e)}")
 
 
-# ====================== AI 智能名冊導入（任意格式） ======================
+# ====================== AI 智能名冊導入 ======================
 def smart_process_roster_import(uploaded_file):
-    """
-    AI 智能名冊導入（任意欄位名稱與順序）
-    """
+    """AI 智能自動匹配欄位導入（Gemini 支援任意格式）"""
     try:
-        if uploaded_file.name.endswith('.csv'):
+        if uploaded_file.name.lower().endswith('.csv'):
             df = pd.read_csv(uploaded_file)
         else:
             df = pd.read_excel(uploaded_file)
@@ -161,29 +161,28 @@ def smart_process_roster_import(uploaded_file):
 
     except Exception as e:
         st.error(f"❌ AI 智能導入失敗: {str(e)}")
-        st.info("💡 提示：若 AI 無法解析，可使用傳統格式導入")
+        st.info("💡 提示：若 AI 無法解析，請改用「傳統格式導入」")
 
 
 # ====================== 系統完整備份 / 還原（解決 Cloud 休眠） ======================
-def export_system_backup(master_df: pd.DataFrame) -> str:
-    """
-    導出完整系統備份（JSON） - 包含所有關鍵資料
-    """
+def export_system_backup(master_report_df: pd.DataFrame) -> str:
+    """導出完整系統狀態（包含全局負荷滑桿）"""
     backup_data = {
-        "master_report": master_df.to_dict(orient="records") if not master_df.empty else [],
-        "roster_table": st.session_state.roster_df.to_dict(orient="index"),
-        "manual_weights": st.session_state.get("manual_weights", pd.DataFrame(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)).to_dict(orient="index"),
-        "leave_tracker": st.session_state.get("leave_tracker_input", []),
+        "students_df": st.session_state.students_df.to_dict(orient="records"),
+        "roster_df": st.session_state.roster_df.to_dict(orient="index"),
+        "manual_weights": st.session_state.manual_weights.to_dict(orient="index"),
+        "master_report": master_report_df.to_dict(orient="records") if not master_report_df.empty else [],
+        "leave_tracker_input": st.session_state.get("leave_tracker_input", []),
         "global_load_multiplier": st.session_state.get("global_load_multiplier", 1.0),
-        "students_df": st.session_state.students_df.to_dict(orient="records")
+        "logo_data": base64.b64encode(st.session_state.logo_data).decode() if st.session_state.get("logo_data") else None,
+        "version": VERSION,
+        "timestamp": datetime.datetime.now().isoformat()
     }
     return json.dumps(backup_data, ensure_ascii=False, indent=2)
 
 
 def import_system_backup(uploaded_json_file):
-    """
-    還原完整系統備份（JSON）
-    """
+    """還原完整系統狀態"""
     try:
         data = json.load(uploaded_json_file)
 
@@ -192,36 +191,40 @@ def import_system_backup(uploaded_json_file):
             st.session_state.students_df = pd.DataFrame(data["students_df"])
 
         # 還原排班表
-        if "roster_table" in data:
-            restored_roster = pd.DataFrame.from_dict(data["roster_table"], orient="index")
+        if "roster_df" in data:
+            restored_roster = pd.DataFrame.from_dict(data["roster_df"], orient="index")
             st.session_state.roster_df = restored_roster.reindex(index=ROWS_ROSTER, columns=DAYS).fillna("")
 
-        # 還原手動負荷
+        # 還原手動調整負荷
         if "manual_weights" in data:
             manual_df = pd.DataFrame.from_dict(data["manual_weights"], orient="index")
             st.session_state.manual_weights = manual_df.reindex(index=ROWS_ROSTER, columns=DAYS).fillna(0.0)
 
-        # 還原請假名單與全局滑桿
-        st.session_state.leave_tracker_input = data.get("leave_tracker", [])
+        # 還原全局負荷滑桿
         if "global_load_multiplier" in data:
-            st.session_state.global_load_multiplier = data["global_load_multiplier"]
+            st.session_state.global_load_multiplier = float(data["global_load_multiplier"])
 
-        st.sidebar.success("🔮 備份已完美還原（包含手動調整負荷與全局滑桿）！")
+        # 還原請假人員
+        st.session_state.leave_tracker_input = data.get("leave_tracker_input", [])
+
+        # 還原校徽
+        if data.get("logo_data"):
+            st.session_state.logo_data = base64.b64decode(data["logo_data"])
+
+        st.sidebar.success("🔮 備份已完美還原（包含全局負荷滑桿與所有數據）！")
         st.rerun()
     except Exception as e:
         st.sidebar.error(f"❌ 還原失敗: {str(e)}")
 
 
 # ====================== A4 橫式彩色 PDF 生成引擎 ======================
-def generate_pdf(roster_df: pd.DataFrame, master_report_df: pd.DataFrame, logo_b64: Optional[str] = None):
-    """
-    生成專業彩色 PDF（含校徽、角色顏色、每日金句、審計表）
-    """
+def generate_pdf(roster_df: pd.DataFrame, master_report_df: pd.DataFrame, logo_b64: str = None) -> bytes:
+    """生成專業彩色 PDF 公告版（含校徽、每日聖經金句、角色背景色）"""
     if not PDF_AVAILABLE:
         st.error("❌ PDF 引擎未就緒，請確認 packages.txt 已加入 weasyprint 並重新部署")
         return None
 
-    # 自動載入 logo
+    # 確保有校徽
     if logo_b64 is None:
         if st.session_state.get("logo_data"):
             logo_b64 = base64.b64encode(st.session_state.logo_data).decode()
@@ -251,12 +254,14 @@ def generate_pdf(roster_df: pd.DataFrame, master_report_df: pd.DataFrame, logo_b
         for day in DAYS:
             val = str(roster_df.at[role, day]).strip()
             style = get_cell_style(val, role, day)
-            html_table += f"<td style='{style}'>{val if val else '&nbsp;'}</td>"
+            display_val = val if val else "&nbsp;"
+            html_table += f"<td style='{style}'>{display_val}</td>"
         html_table += "</tr>"
 
     html_table += "</table>"
 
-    report_table = master_report_df.to_html(index=False, classes='table') if not master_report_df.empty else "<p>尚無審計資料</p>"
+    # 工作負荷統計表
+    report_table = master_report_df.to_html(index=False, classes='table') if not master_report_df.empty else "<p style='color:#666;'>尚無審計數據</p>"
 
     html = f"""
     <html><head><meta charset="UTF-8">
@@ -277,7 +282,7 @@ def generate_pdf(roster_df: pd.DataFrame, master_report_df: pd.DataFrame, logo_b
     if logo_b64:
         html += f'<img src="data:image/png;base64,{logo_b64}" style="height:60px; margin-bottom:8px;">'
     html += f"""
-        <h1>Sing Yin Secondary School</h1>
+        <h1>{PROJECT_FULL_NAME}</h1>
         <h2>Study Prefect Duty Roster & Workload Audit</h2>
         <div class="date-sub">Report Generated: {today}</div>
     </div>
@@ -288,7 +293,8 @@ def generate_pdf(roster_df: pd.DataFrame, master_report_df: pd.DataFrame, logo_b
     {report_table}
     </body></html>
     """
+
     return HTML(string=html).write_pdf()
 
 
-print("✅ utils.py 已載入完成 - PDF 引擎、備份還原、名冊導入模組就緒")
+print("✅ utils.py 已載入完成 - PDF 引擎、備份還原、名冊導入模組就緒（已支援全局負荷滑桿）")
