@@ -23,7 +23,7 @@ from config import (
 )
 from data import (
     get_demo_dataframe, get_sample_format_dataframe,
-    initialize_session_state, validate_students_dataframe
+    initialize_session_state
 )
 from ai_parser import ai_parse_remarks
 from core import generate_roster, validate_and_compute, recommend_substitutes
@@ -50,7 +50,7 @@ HELP_TEXT = """
 - 在側邊欄設定請假人員與特殊不開放時段。
 - 點擊主畫面大按鈕「🚀 智能計算：生成本週全新公平值班表」。
 
-#### 4. 全局負荷調節滑桿（新增功能）
+#### 4. 全局負荷調節滑桿（新增重要功能）
 - 主畫面最上方可即時調整本次排班整體負荷倍率（0.8\~2.0）。
 - 臨近考試時提高倍率，讓累計負荷較低的學生優先達到平衡。
 
