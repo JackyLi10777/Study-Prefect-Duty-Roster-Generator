@@ -4,7 +4,7 @@
 核心排班演算法模組 - 公平性計算、驗證、智慧替補推薦
 
 作者：Head Study Prefect 26-27 LI Chuangjie Jacky
-版本：v2.3 Final（已整合全局負荷滑桿、6行多槽位排班、完整業務規則、Streamlit Cloud 相容）
+版本：v2.3 Final（已修正 KeyError、空報表防護、全局負荷滑桿、6行多槽位排班、完整業務規則）
 """
 
 import pandas as pd
@@ -133,6 +133,7 @@ def validate_and_compute(
 ) -> Dict:
     """
     完整驗證 + 動態負荷計算（最終版）
+    已修正：當 report 為空時避免 KeyError
     """
     errors = {
         "typo": (False, []),
@@ -207,7 +208,15 @@ def validate_and_compute(
             "最終總計加權負荷 (點)": round(total_weight, 1)
         })
 
-    report_df = pd.DataFrame(report).sort_values(by="最終總計加權負荷 (點)", ascending=True)
+    report_df = pd.DataFrame(report)
+    if not report_df.empty:
+        report_df = report_df.sort_values(by="最終總計加權負荷 (點)", ascending=True)
+    else:
+        # 避免 KeyError：當沒有學生時建立空表格（欄位完整）
+        report_df = pd.DataFrame(columns=[
+            "學生姓名 (Prefect Name)", "年級 (Form)", "班別 (Class)",
+            "職級 (Role)", "當週新增 (次)", "最終總計加權負荷 (點)"
+        ])
 
     return {
         "report_df": report_df,
@@ -259,4 +268,4 @@ def recommend_substitutes(
     return sub_df, None
 
 
-print("✅ core.py 已載入完成 - 公平排班引擎 + 智慧替補 + 驗證模組就緒")
+print("✅ core.py 已載入完成 - 公平排班引擎 + 智慧替補 + 驗證模組就緒（KeyError 已修復）")
