@@ -11,7 +11,6 @@ import streamlit as st
 import pandas as pd
 import json
 import datetime
-from typing import Optional
 
 # ====================== 導入所有模組 ======================
 from config import (
@@ -108,11 +107,9 @@ elif menu == "👥 學生名冊":
 elif menu == "📅 排班生成":
     st.subheader("🎯 手動生成排班")
     
-    # 正確處理全局負荷滑桿（已修正 widget 衝突）
+    # 全局負荷滑桿（已修正 widget 衝突）
     multiplier = global_multiplier_slider()
-    
-    if "global_load_multiplier" not in st.session_state or st.session_state.global_load_multiplier != multiplier:
-        st.session_state.global_load_multiplier = multiplier
+    st.session_state.global_load_multiplier = multiplier
 
     if st.button("🚀 立即生成最新排班表", type="primary", use_container_width=True):
         with st.spinner("正在使用公平演算法生成排班..."):
