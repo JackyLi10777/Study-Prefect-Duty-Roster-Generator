@@ -11,6 +11,7 @@ import streamlit as st
 import pandas as pd
 import json
 import datetime
+from typing import Optional
 
 # ====================== 導入所有模組 ======================
 from config import (
@@ -107,7 +108,7 @@ elif menu == "👥 學生名冊":
 elif menu == "📅 排班生成":
     st.subheader("🎯 手動生成排班")
     
-    # 全局負荷滑桿（已修正 widget 衝突）
+    # ====================== 全局負荷調節滑桿（新增核心功能） ======================
     multiplier = global_multiplier_slider()
     st.session_state.global_load_multiplier = multiplier
 
